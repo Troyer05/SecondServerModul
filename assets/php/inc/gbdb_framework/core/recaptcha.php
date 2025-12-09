@@ -1,43 +1,58 @@
 <?php
 
 class ReCaptcha {
+
     /**
-     * @return string Name der ReCaptcha $_POST Checkbox
+     * Name der POST Variable
      */
     public static function postName(): string {
         return "g-recaptcha-response";
     }
 
     /**
-     * Erstellt die reCAPTCHA checkbox
-     * 
-     * @param string $callbaclJs (OPTIONAL) Name einer JavaScript Funktion die ausgeführt werden soll, wenn die Checkbox gecheked wird
-     * @return string Die HTML der ReCAPTCHA Checkbox
+     * Gibt das HTML-Element für reCAPTCHA aus
      */
     public static function checkBox(string $callbackJs = ""): string {
         $wc = Vars::reCaptcha_website_key();
-        return '<div class="g-recaptcha" data-sitekey="' . $wc. '" data-callback="' . $callbackJs . '"></div>';
+        $cb = htmlspecialchars($callbackJs, ENT_QUOTES);
+
+        return '<div class="g-recaptcha" data-sitekey="' . $wc . '" data-callback="' . $cb . '"></div>';
     }
 
     /**
-     * Verifizierung von reCAPTCHA
-     * 
-     * @param mixed $post POST Variable von reCAPTCHA Checkbox ($_POST[ReCaptcha::postName()])
-     * @return boolean TRUE wenn Verifizierung erfolgreich!
+     * Verifiziert das reCAPTCHA Token
+     * @param string|null $token Das POST Token von Google
+     * @return bool TRUE wenn verifiziert
      */
-    public static function verify(mixed $post): bool {
-        if (!empty($post)) {
-            $reCAPTCHA_secret_key = Vars::reCaptcha_secret_key();
-            $reCAPTCHA_uri = "https://www.google.com/recaptcha/api/siteverify";
-            $reCAPTCHA_param1 = "?secret=" . $reCAPTCHA_secret_key;
-            $reCAPTCHA_param2 = "&response=". $post;
-            $reCAPTCHA_param3 = "&remoteip=". Vars::client_ip();
-            $reCAPTCHA_complete_uri = $reCAPTCHA_uri . $reCAPTCHA_param1 . $reCAPTCHA_param2 . $reCAPTCHA_param3;
-            $reCAPTCHA_verify = Api::fetch($reCAPTCHA_complete_uri);
-            
-            return $reCAPTCHA_verify["success"];
+    public static function verify(?string $token): bool {
+        if (empty($token)) {
+            return false;
         }
-        
-        return false;
+
+        $url = "https://www.google.com/recaptcha/api/siteverify";
+
+        $payload = [
+            "secret"   => Vars::reCaptcha_secret_key(),
+            "response" => $token,
+            "remoteip" => Vars::client_ip()
+        ];
+
+        // Anfrage an Google
+        $response = Http::post($url, $payload);
+
+        if ($response === false) {
+            error_log("[ReCaptcha::verify] Fehler bei Anfrage an Google");
+            return false;
+        }
+
+        $json = json_decode($response, true);
+
+        if (!is_array($json)) {
+            error_log("[ReCaptcha::verify] Ungültige Google Antwort: " . $response);
+            return false;
+        }
+
+        return !empty($json["success"]);
     }
 }
+

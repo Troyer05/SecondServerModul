@@ -1,39 +1,44 @@
 <?php
 declare(strict_types=1);
-require 'ENV.php';
 
-$plugins = 'assets/php/inc/gbdb_framework/core';
-$pluginPath = realpath($plugins);
+require_once __DIR__ . "/ENV.php";
 
-if ($pluginPath && is_dir($pluginPath)) {
-    foreach (glob($pluginPath . '/*.php') as $pluginFile) {
-        try {
-            include_once $pluginFile;
-        } catch (Throwable $e) {
-            error_log("[PluginLoader] Fehler beim Laden von {$pluginFile}: " . $e->getMessage());
-        }
+/**
+ * Lädt alle PHP-Dateien in einem Ordner
+ */
+function gbdb_loadLocal(string $folder): void {
+
+    $path = rtrim($folder, '/\\');
+
+    if (!is_dir($path)) {
+        error_log("[GBDB Loader] Ordner fehlt: $path");
+        return;
+    }
+
+    $files = glob($path . "/*.php");
+
+    if (!$files) return;
+
+    sort($files, SORT_STRING);
+
+    foreach ($files as $file) {
+        require_once $file;
     }
 }
 
-$plugins = 'assets/php/inc/gbdb_framework/plugins';
-$pluginPath = realpath($plugins);
 
-if ($pluginPath && is_dir($pluginPath)) {
-    foreach (glob($pluginPath . '/*.php') as $pluginFile) {
-        try {
-            include_once $pluginFile;
-        } catch (Throwable $e) {
-            error_log("[PluginLoader] Fehler beim Laden von {$pluginFile}: " . $e->getMessage());
-        }
-    }
-}
+// === KORREKTE PFADBASIS ===
+// gbdb.php befindet sich in: /assets/php/inc/gbdb_framework/
+$BASE = __DIR__;
 
-Session::handler();
-Cookie::init();
 
-if (Vars::enable_https_redirect()) {
-    if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && 'https' == $_SERVER['HTTP_X_FORWARDED_PROTO']) {
-        $_SERVER['HTTPS'] = 1;
-    }
-}
-?>
+// === CORE LADEN ===
+gbdb_loadLocal($BASE . "/core");
+
+
+// === PLUGINS LADEN ===
+gbdb_loadLocal($BASE . "/plugins");
+
+
+// === GBDB SYSTEM LADEN ===
+// Falls du gbdb_sys.php etc. hast, wird das automatisch geladen.

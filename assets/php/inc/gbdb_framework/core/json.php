@@ -1,65 +1,86 @@
 <?php
 
 class Json {
+
     /**
      * Dekodiert einen JSON-String in ein PHP-Array oder Objekt
-     * @param string $json Der zu dekodierende JSON-String
-     * @param bool $assoc Gibt an, ob das zurückgegebene Objekt ein assoziatives Array sein soll oder nicht
-     * @return mixed Das dekodierte JSON als Array oder Objekt
+     * Gibt bei Fehlern eine klare Fehlermeldung zurück.
      */
-    public static function decode($json, $assoc = false) {
-        return json_decode($json, $assoc);
+    public static function decode(string $json, bool $assoc = false): mixed {
+        if ($json === "") {
+            return null;
+        }
+
+        $decoded = json_decode($json, $assoc);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("[Json::decode] JSON Error: " . json_last_error_msg());
+            return null;
+        }
+
+        return $decoded;
     }
 
     /**
-     * Kodiert ein PHP-Array oder Objekt in einen JSON-String
-     * @param mixed $data Das zu kodierende Array oder Objekt
-     * @return string Der JSON-String
+     * Kodiert ein PHP-Array oder Objekt in einen JSON-String.
+     * UTF-8 sicher, pretty-print im DEV Mode.
      */
-    public static function encode($data) {
-        return json_encode($data);
+    public static function encode(mixed $data, bool $pretty = false): string {
+        $options = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+
+        if ($pretty || (class_exists('Vars') && Vars::json_pretty())) {
+            $options |= JSON_PRETTY_PRINT;
+        }
+
+        $json = json_encode($data, $options);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("[Json::encode] JSON Error: " . json_last_error_msg());
+            return "";
+        }
+
+        return $json;
     }
 
     /**
-     * Überprüft, ob eine Zeichenkette ein gültiges JSON ist
-     * @param string $json Die zu überprüfende Zeichenkette
-     * @return bool Gibt zurück, ob die Zeichenkette ein gültiges JSON ist (true) oder nicht (false)
+     * Überprüft, ob eine Zeichenkette valides JSON ist.
      */
-    public static function isJson($json) {
+    public static function isJson(string $json): bool {
+        if (!is_string($json) || trim($json) === "") return false;
+
         json_decode($json);
-        return (json_last_error() == JSON_ERROR_NONE);
+
+        return json_last_error() === JSON_ERROR_NONE;
     }
 
     /**
-     * Iteriert über jedes Element eines Arrays oder Objekts und wendet eine Callback-Funktion darauf an
-     * @param mixed $data Das Array oder Objekt, über das iteriert werden soll
-     * @param callable $callback Die Callback-Funktion, die auf jedes Element angewendet werden soll
-     * @return mixed Das modifizierte Array oder Objekt
+     * Wendet eine Callback-Funktion auf jedes Element eines Arrays oder Objekts an.
      */
-    public static function loop($data, $callback) {
+    public static function loop(mixed $data, callable $callback): mixed {
         if (is_array($data)) {
             foreach ($data as $key => $value) {
-                $data[$key] = call_user_func($callback, $value, $key);
+                $data[$key] = $callback($value, $key);
             }
-        } elseif (is_object($data)) {
+        } 
+        
+        elseif (is_object($data)) {
             foreach ($data as $key => $value) {
-                $data->$key = call_user_func($callback, $value, $key);
+                $data->$key = $callback($value, $key);
             }
         }
-        
+
         return $data;
     }
 
     /**
-     * Überprüft, ob ein bestimmtes Element in einem JSON-Array oder Objekt existiert
-     * @param mixed $data Das JSON-Array oder -Objekt
-     * @param string $key Der Schlüssel des zu überprüfenden Elements
-     * @return bool Gibt zurück, ob das Element existiert (true) oder nicht (false)
+     * Überprüft, ob ein Schlüssel in Array/Objekt existiert.
      */
-    public static function elementExists($data, $key) {
+    public static function elementExists(mixed $data, string $key): bool {
         if (is_array($data)) {
             return array_key_exists($key, $data);
-        } elseif (is_object($data)) {
+        }
+
+        if (is_object($data)) {
             return property_exists($data, $key);
         }
 
@@ -67,20 +88,13 @@ class Json {
     }
 
     /**
-     * Ruft die Daten eines bestimmten Elements aus einem JSON-Array oder -Objekt ab, falls es existiert
-     * @param mixed $data Das JSON-Array oder -Objekt
-     * @param string $key Der Schlüssel des Elements
-     * @return mixed Die Daten des Elements, falls vorhanden, ansonsten null
+     * Ruft ein Element aus Array/Objekt ab — oder null.
      */
-    public static function getElement($data, $key) {
-        if (self::elementExists($data, $key)) {
-            if (is_array($data)) {
-                return $data[$key];
-            } elseif (is_object($data)) {
-                return $data->$key;
-            }
+    public static function getElement(mixed $data, string $key): mixed {
+        if (!self::elementExists($data, $key)) {
+            return null;
         }
 
-        return null;
+        return is_array($data) ? $data[$key] : $data->$key;
     }
 }

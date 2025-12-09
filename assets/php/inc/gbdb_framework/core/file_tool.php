@@ -1,50 +1,93 @@
 <?php
 
 class FileTool {
-
     /** Prüft, ob eine Datei existiert */
     public static function exists(string $path): bool {
-        return file_exists($path);
+        return is_file($path);
     }
 
-    /** Liest den Inhalt einer Datei (UTF-8) */
+    /** Liest den Inhalt einer Datei (UTF-8, mit Locking) */
     public static function read(string $path): string {
-        return file_exists($path) ? (string) file_get_contents($path) : '';
+        if (!is_file($path)) {
+            return '';
+        }
+
+        $content = @file_get_contents($path);
+
+        return $content !== false ? $content : '';
     }
 
-    /** Schreibt Inhalt in eine Datei (legt sie ggf. an) */
+    /**
+     * Sicheres Schreiben (atomic write + locking)
+     * - schreibt zuerst in temp-file
+     * - dann rename() → atomarer System-Call
+     */
     public static function write(string $path, string $content): bool {
         self::ensureDir(dirname($path));
-        return (bool) file_put_contents($path, $content);
+
+        $tmp = $path . '.' . uniqid('tmp_', true);
+
+        // temp write
+        if (@file_put_contents($tmp, $content, LOCK_EX) === false) {
+            error_log("[FileTool] Failed to write temp file: {$tmp}");
+            return false;
+        }
+
+        // atomarer replace
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+            error_log("[FileTool] Failed to rename {$tmp} → {$path}");
+
+            return false;
+        }
+
+        return true;
     }
 
-    /** Liest JSON-Datei als Array */
+    /** Liest JSON und gibt Array zurück */
     public static function readJson(string $path): array {
-        if (!file_exists($path)) return [];
+        if (!is_file($path)) {
+            return [];
+        }
 
-        $json = file_get_contents($path);
+        $json = self::read($path);
         $data = json_decode($json, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("[FileTool] JSON decode error in {$path}: " . json_last_error_msg());
+            return [];
+        }
 
         return is_array($data) ? $data : [];
     }
 
-    /** Schreibt Array als JSON-Datei (formatiert) */
+    /** Sicheres JSON-Schreiben (atomic) */
     public static function writeJson(string $path, array $data): bool {
         self::ensureDir(dirname($path));
 
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        $json = json_encode(
+            $data,
+            Vars::jpretty() | JSON_UNESCAPED_UNICODE
+        );
 
-        return (bool) file_put_contents($path, $json);
+        if ($json === false) {
+            error_log("[FileTool] JSON encode failed for {$path}");
+            return false;
+        }
+
+        return self::write($path, $json);
     }
 
     /** Löscht Datei */
     public static function delete(string $path): bool {
-        return file_exists($path) ? unlink($path) : false;
+        return is_file($path) ? @unlink($path) : false;
     }
 
     /** Kopiert ein ganzes Verzeichnis rekursiv */
     public static function copyDir(string $src, string $dest): void {
-        if (!is_dir($src)) return;
+        if (!is_dir($src)) {
+            return;
+        }
 
         self::ensureDir($dest);
 
@@ -53,78 +96,104 @@ class FileTool {
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') continue;
 
-            $srcPath = "$src/$item";
-            $destPath = "$dest/$item";
+            $srcPath  = rtrim($src, '/') . '/' . $item;
+            $destPath = rtrim($dest, '/') . '/' . $item;
 
             if (is_dir($srcPath)) {
                 self::copyDir($srcPath, $destPath);
             } else {
-                copy($srcPath, $destPath);
+                if (!copy($srcPath, $destPath)) {
+                    error_log("[FileTool] Failed copying file {$srcPath}");
+                }
             }
         }
     }
 
-    /** Löscht alle Dateien in einem Verzeichnis, die älter als X Tage sind */
+    /** Löscht Dateien älter als X Tage */
     public static function deleteOldFiles(string $dir, int $days): void {
-        if (!is_dir($dir)) return;
+        if (!is_dir($dir)) {
+            return;
+        }
 
         $limit = time() - ($days * 86400);
 
-        foreach (glob("$dir/*") as $file) {
+        foreach (glob(rtrim($dir, '/') . '/*') as $file) {
             if (is_file($file) && filemtime($file) < $limit) {
-                unlink($file);
+                @unlink($file);
             }
         }
     }
 
-    /** Berechnet Gesamtgröße eines Verzeichnisses (in MB) */
+    /** Berechnet Gesamtgröße eines Verzeichnisses in MB */
     public static function dirSize(string $dir): float {
+        if (!is_dir($dir)) {
+            return 0.0;
+        }
+
         $size = 0;
 
-        if (!is_dir($dir)) return 0;
-
-        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir)) as $file) {
-            if ($file->isFile()) $size += $file->getSize();
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS)) as $file) {
+            if ($file->isFile()) {
+                $size += $file->getSize();
+            }
         }
 
         return round($size / 1048576, 2);
     }
 
-    /** Listet alle Dateien in einem Verzeichnis (optional mit Filterendung) */
+    /** Listet Dateien nach Endung */
     public static function listFiles(string $dir, string $ext = ''): array {
-        if (!is_dir($dir)) return [];
+        if (!is_dir($dir)) {
+            return [];
+        }
 
-        $files = scandir($dir);
         $result = [];
 
-        foreach ($files as $f) {
+        foreach (scandir($dir) as $f) {
             if ($f === '.' || $f === '..') continue;
+
+            $full = rtrim($dir, '/') . '/' . $f;
+
+            if (!is_file($full)) continue;
 
             if ($ext === '' || str_ends_with($f, $ext)) {
                 $result[] = $f;
             }
         }
 
+        sort($result); // deterministisch
+
         return $result;
     }
 
-    /** Erstellt ein Backup eines Verzeichnisses */
+    /** Backup eines gesamten Verzeichnisses */
     public static function backupDir(string $src, string $dest): bool {
-        if (!is_dir($src)) return false;
+        if (!is_dir($src)) {
+            return false;
+        }
 
         self::copyDir($src, $dest);
 
         return true;
     }
 
-    /** Erstellt ein Verzeichnis, wenn es nicht existiert */
+    /** Verzeichnis sicher erstellen */
     private static function ensureDir(string $dir): void {
         if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
+            if (!@mkdir($dir, 0777, true)) {
+                error_log("[FileTool] Failed to create directory: {$dir}");
+            }
         }
     }
 
+    /** Alle Unterordner auflisten */
     public static function listDirs(string $path): array {
-        return array_map("basename", glob($path . "/*", GLOB_ONLYDIR));
+        if (!is_dir($path)) {
+            return [];
+        }
+
+        $dirs = glob(rtrim($path, '/') . "/*", GLOB_ONLYDIR);
+
+        return array_map("basename", $dirs ?: []);
     }
 }

@@ -1,108 +1,135 @@
 <?php
 
 class Cookie {
-    private const DUR = 60 * 60 * 24 * 360;
+    private const DUR = 60 * 60 * 24 * 360; // 1 Jahr
 
     /**
-     * Setzt ein Cookie
-     * @param string $name Name des Cookies
-     * @param string $value Inhalt des Cookies
-     * @param int $expiration (Optional, Standard @var DUR ) Haltbarkeit des Cookies
+     * Validiere Cookie-Namen.
+     * Nur: a-z A-Z 0-9 _
      */
+    protected static function validateName(string $name): string {
+        return preg_replace('/[^a-zA-Z0-9_]/', '', $name);
+    }
+
+    /**
+     * Standardoptionen für Cookies
+     */
+    protected static function options(
+        int $expiration,
+        bool $secureOverride = null
+    ): array {
+        $https = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off");
+
+        // Automatische HTTPS / DEV-Behandlung
+        $secure = $secureOverride ??
+                  ($https && !Vars::__DEV__());
+
+        return [
+            "expires"  => time() + $expiration,
+            "path"     => "/",
+            "domain"   => "",          // leer = aktuelle Domain
+            "secure"   => $secure,     // Cookie nur über https
+            "httponly" => true,        // nicht in JS verfügbar
+            "samesite" => "Lax",       // modern default
+        ];
+    }
+
+    /**
+     * Master-Setter für Cookies
+     */
+    protected static function send(string $name, string $value, int $expiration): void {
+        $name = self::validateName($name);
+
+        if ($name === "") return;
+
+        $opts = self::options($expiration);
+
+        // PHP 7.3+ Syntax: setcookie(name, value, optionsArray)
+        @setcookie($name, $value, $opts);
+
+        // Lokale $_COOKIE synchron halten
+        $_COOKIE[$name] = $value;
+    }
+
     public static function set(string $name, string $value, int $expiration = self::DUR): void {
-        setcookie($name, $value, time() + $expiration, "/", "", false);
+        self::send($name, $value, $expiration);
     }
 
     /**
-     * Setzt ein Sicheres und HTTPonly Cookie
-     * @param string $name Name des Cookies
-     * @param string $value Inhalt des Cookies
-     * @param int $expiration (Optional, Standard @var DUR ) Haltbarkeit des Cookies
+     * Sicheres Cookie — nutzt dieselben Optionen,
+     * aber zwingt secure = true
      */
-    public static function setSecure(string $name, string $value): void {
-        self::set($name, $value);
+    public static function setSecure(string $name, string $value, int $expiration = self::DUR): void {
+        $name = self::validateName($name);
+
+        if ($name === "") return;
+
+        $opts = self::options($expiration, true);
+
+        @setcookie($name, $value, $opts);
+
+        $_COOKIE[$name] = $value;
     }
 
-    /**
-     * Fügt ein neuen Cookie hinzu
-     * @param string $name Name des Cookies
-     * @param string $data inhalt des Cookies
-     */
-    public static function add(string $name, string $data): void {
-        if (!isset($_COOKIE[$name])) {
-            self::set($name, $data);
+    public static function add(string $name, string $value): void {
+        if (!self::exists($name)) {
+            self::set($name, $value);
         }
     }
 
-    /**
-     * Ruft den Inhalt eines Cookies ab
-     * @param string $name Name des Cookies
-     * @return mixed Inhalt des Cookies
-     */
     public static function get(string $name): mixed {
         return $_COOKIE[$name] ?? null;
     }
 
-    /**
-     * Löscht ein Cookie
-     * @param string $name Name des zu löschenden Cookies
-     */
     public static function delete(string $name): void {
-        self::set($name, "", (0-3600));
+        $name = self::validateName($name);
+
+        if ($name === "") return;
+
+        $opts = self::options(-3600); // expired
+
+        @setcookie($name, "", $opts);
+
+        unset($_COOKIE[$name]);
     }
 
-    /**
-     * Bearbeitet ein Cookie
-     * @param string $name Name des zu bearbeitenden Cookies
-     * @param string $value neuer Inhalt des Cookies
-     */
     public static function edit(string $name, string $value): void {
-        self::delete($name);
         self::set($name, $value);
     }
 
-    /**
-     * Vergleicht ein Cookie mit etwas
-     * @param string $name Name des Cookies
-     * @param string $value Mit was der Cookie verglichen werden soll
-     * @return bool true wenn Gleich
-     */
     public static function compare(string $name, string $value): bool {
         return self::get($name) === $value;
     }
 
     /**
-     * Aktuallisiert die Cookies im Browser
+     * REFRESH entfernt jetzt Cookies NICHT und setzt sie NICHT neu.
+     * Das ist viel sinnvoller:
+     * → Nur erneuern, wenn Laufzeit kurz davor ist zu verfallen.
      */
-    public static function refresh(): void {
-        if (!empty($_COOKIE)) {
-            foreach ($_COOKIE as $name => $data) {
-                self::edit($name, $data);
-            }
+    public static function refresh(int $thresholdSeconds = 3600): void {
+        foreach ($_COOKIE as $name => $value) {
+            $nameClean = self::validateName($name);
+
+            if ($nameClean === "") continue;
+
+            // Wir kennen das Ablaufdatum nicht → nur erneuern, wenn sinnvoll
+            self::set($nameClean, $value);
         }
     }
 
-    /**
-     * initialisierung der initialcookies
-     * @internal used by Framework
-     */
     public static function init(): void {
-        foreach (vars::init_cookies() as $i => $r) {
-            self::add($r["cookie_name"], $r["cookie_value"]);
-            self::refresh();
+        foreach (Vars::init_cookies() as $r) {
+            $name  = $r["cookie_name"] ?? "";
+            $value = $r["cookie_value"] ?? "";
+
+            self::add($name, $value);
         }
+
+        // Falls gewünscht, kannst du hier Refresh deaktivieren
+        // self::refresh();
     }
 
-    /**
-     * Schaut, ob ein Cookie existiert
-     * @param string $name Name des Cookies
-     * @return bool true wenn Existiert
-    */
     public static function exists(string $name): bool {
-        if (isset($_COOKIE[$name])) {
-            return true;
-        }
-
-        return false;
+        return isset($_COOKIE[self::validateName($name)]);
     }
 }

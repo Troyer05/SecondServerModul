@@ -1,114 +1,117 @@
 <?php
 
 class SQL {
-    /**
-     * @var mixed $pdo PDO SQL Connection
-     */
-    public static $pdo;
+
+    /** @var PDO|null */
+    public static ?PDO $pdo = null;
 
     /**
-     * Stellt die Verbindung zum SQL Server her
-     * @return bool true wenn es keine Probleme gab
+     * Stellt die Verbindung her (sicher, UTF-8, Fehlermodus)
      */
     public static function connect(): bool {
+        if (self::$pdo instanceof PDO) {
+            return true;
+        }
+
+        // DEV oder PROD DB auswählen
         if (Vars::__DEV__()) {
-            $dsn = "mysql:host=" . Vars::sql_dev_server();
-            $dsn .= ";dbname=" . Vars::sql_dev_database();
-            $u = Vars::sql_dev_user();
-            $p = Vars::sql_dev_password();
+            $dsn = "mysql:host=" . Vars::sql_dev_server() . ";dbname=" . Vars::sql_dev_database() . ";charset=utf8mb4";
+            $user = Vars::sql_dev_user();
+            $pass = Vars::sql_dev_password();
         } else {
-            $dsn = "mysql:host=" . Vars::sql_server();
-            $dsn .= ";dbname=" . Vars::sql_database();
-            $u = Vars::sql_user();
-            $p = Vars::sql_password();
+            $dsn = "mysql:host=" . Vars::sql_server() . ";dbname=" . Vars::sql_database() . ";charset=utf8mb4";
+            $user = Vars::sql_user();
+            $pass = Vars::sql_password();
         }
 
         try {
-            self::$pdo = new PDO($dsn, $u, $p);
+            self::$pdo = new PDO($dsn, $user, $pass, [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+                PDO::ATTR_PERSISTENT         => true
+            ]);
+
             return true;
+
         } catch (PDOException $e) {
-            echo "Error when connecting to SQL database: " . $e;
+            error_log("[SQL::connect] ERROR: " . $e->getMessage());
             return false;
         }
     }
 
     /**
-     * Sendet eine SQL Abfrage an den SQL Server
-     * @param string $query die zu sendene SQL Abfrage
-     * @return mixed die Antwort des SQL Servers / Das Ergebnis der SQL Abfrage
+     * Interne: prepared statement ausführen
      */
-    public static function sendSQL(string $query): mixed {
-        $ergebnis = self::$pdo->query($query);
-    
-        if ($ergebnis) {
-            return $ergebnis->fetchAll(PDO::FETCH_ASSOC);
+    private static function run(string $query, array $params = []): array|bool {
+        self::connect();
+
+        try {
+            $stmt = self::$pdo->prepare($query);
+            $stmt->execute($params);
+
+            if (stripos($query, "SELECT") === 0) {
+                return $stmt->fetchAll();
+            }
+
+            return true;
+
+        } catch (PDOException $e) {
+            error_log("[SQL::run] Query failed: $query | Params: " . json_encode($params));
+            error_log($e->getMessage());
+
+            return false;
         }
-    
-        return false;
     }
 
     /**
-     * Einfacher Select Befehl
-     * @param string $table Name der Tabelle
-     * @param string $select Was sie Selectieren wollen (Optional, Standard: *)
-     * @param string $where (Optional)
-     * @param string $is (Optional, @example $where = "name" $is = "Max")
-     * @return mixed Ergebnis der SELECT Abfrage
+     * SELECT
      */
-    public static function select(string $table, string $select = "*", string $where = "", string $is = ""): mixed {
-        if ($where != "") {
-            $query = "SELECT $select FROM $table WHERE $where = $is";
-        } else {
-            $query = "SELECT $select FROM $table";
+    public static function select(string $table, string $select = "*", string $where = "", mixed $is = "",): array|bool {
+        if ($where !== "") {
+            $query = "SELECT $select FROM `$table` WHERE `$where` = :is";
+            return self::run($query, ["is" => $is]);
         }
 
-        return self::sendSQL($query);
+        $query = "SELECT $select FROM `$table`";
+
+        return self::run($query);
     }
 
     /**
-     * Einfacher Insert-Befehl
-     * @param string $table Name der Tabelle
-     * @param array $data Daten zum Einfügen (assoziatives Array)
-     * @return mixed Ergebnis des Insert-Befehls
+     * INSERT
      */
-    public static function insert(string $table, array $data): mixed {
-        $columns = implode(', ', array_keys($data));
-        $values = "'" . implode("', '", array_values($data)) . "'";
-        $query = "INSERT INTO $table ($columns) VALUES ($values)";
+    public static function insert(string $table, array $data): bool {
+        $cols = array_keys($data);
+        $placeholders = array_map(fn($c) => ":$c", $cols);
 
-        return self::sendSQL($query);
-    }
-
-    /**
-     * Einfacher Update-Befehl
-     * @param string $table Name der Tabelle
-     * @param array $data Neue Daten (assoziatives Array)
-     * @param string $where Spalte für die Bedingung
-     * @param mixed $is Wert für die Bedingung
-     * @return mixed Ergebnis des Update-Befehls
-     */
-    public static function update(string $table, array $data, string $where, mixed $is): mixed {
-        $set = '';
-
-        foreach ($data as $column => $value) {
-            $set .= "$column = '$value', ";
-        }
-
-        $set = rtrim($set, ', ');
-        $query = "UPDATE $table SET $set WHERE $where = '$is'";
+        $sql = "INSERT INTO `$table` (" . implode(",", $cols) . ") VALUES (" . implode(",", $placeholders) . ")";
         
-        return self::sendSQL($query);
+        return self::run($sql, $data);
     }
 
     /**
-     * Einfacher Delete-Befehl
-     * @param string $table Name der Tabelle
-     * @param string $where Spalte für die Bedingung
-     * @param mixed $is Wert für die Bedingung
-     * @return mixed Ergebnis des Delete-Befehls
+     * UPDATE
      */
-    public static function delete(string $table, string $where, mixed $is): mixed {
-        $query = "DELETE FROM $table WHERE $where = '$is'";
-        return self::sendSQL($query);
+    public static function update(string $table, array $data, string $where, mixed $is): bool {
+        $setParts = [];
+
+        foreach ($data as $col => $val) {
+            $setParts[] = "`$col` = :$col";
+        }
+
+        $sql = "UPDATE `$table` SET " . implode(", ", $setParts) . " WHERE `$where` = :whereVal";
+
+        $data["whereVal"] = $is;
+
+        return self::run($sql, $data);
+    }
+
+    /**
+     * DELETE
+     */
+    public static function delete(string $table, string $where, mixed $is): bool {
+        $sql = "DELETE FROM `$table` WHERE `$where` = :is";
+        return self::run($sql, ["is" => $is]);
     }
 }

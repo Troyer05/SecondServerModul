@@ -10,9 +10,8 @@ if (!is_array($body)) {
     resp(400, "Invalid JSON body.");
 }
 
-// ERST checken, ob do == "gtoken"
 if (isset($body["do"]) && $body["do"] === "gtoken") {
-    if ($body["sauth"] != "_dev") {
+    if ($body["sauth"] != "_dev" && $body["sauth"] == STATIC_AUTH) {
         $tokens = GBDB::getData("main", "t");
 
         do {
@@ -26,12 +25,12 @@ if (isset($body["do"]) && $body["do"] === "gtoken") {
             }
         } while ($retry);
 
-        GBDB::insertData("main", "t", ["token" => $token]);
+        GBDB::insertData("main", "t", ["token" => Crypt::encode($token)]);
     } else {
         $token = "_dev";
     }
 
-    resp(200, $token); // <-- beendet Script
+    resp(200, $token);
 }
 
 general_auth($body, $method);
@@ -41,12 +40,11 @@ $do = $body["do"];
 
 if ($body["sauth"] !== "_dev") {
     test_param(["token"], $body);
-    
+
     if (!test_token($body["token"])) {
         resp(401, "SAuth Token invalid.");
     }
 }
-
 
 if ($do == "get") {
     $ts = ["db", "table"];
@@ -54,9 +52,9 @@ if ($do == "get") {
     test_param($ts, $body);
 
     if (isset($body["where"]) && isset($body["is"])) {
-        $e = GBDB::getData($body["db"], $body["table"], true, $body["where"], $body["is"]);
+        $e = DB_GET($body["db"], $body["table"], true, $body["where"], $body["is"]);
     } else {
-        $e = GBDB::getData($body["db"], $body["table"]);
+        $e = DB_GET($body["db"], $body["table"]);
     }
 
     resp(200, $e);
@@ -64,21 +62,21 @@ if ($do == "get") {
 
 if ($do == "put") {
     $ts = ["db", "table", "data"];
-    
+
     test_param($ts, $body);
 
-    $id = GBDB::insertData($body["db"], $body["table"], $body["data"]);
+    $id = DB_PUT($body["db"], $body["table"], $body["data"]);
 
-    if ($id != -1) {
+    if ($id !== false && $id != -1) {
         $data = [
             "id" => $id,
             "inserted" => date("d.m.Y H:i:s")
         ];
 
         resp(200, $data);
-    } else {
-        resp(400, "Wrong Data provided.");
     }
+
+    resp(400, "Wrong Data provided.");
 }
 
 if ($do == "delete") {
@@ -86,7 +84,7 @@ if ($do == "delete") {
 
     test_param($ts, $body);
 
-    GBDB::deleteData($body["db"], $body["table"], $body["where"], $body["is"]);
+    DB_DELETE($body["db"], $body["table"], $body["where"], $body["is"]);
 
     resp(200, "Data deleted successfully.");
 }
@@ -96,7 +94,7 @@ if ($do == "edit") {
 
     test_param($ts, $body);
 
-    $ok = GBDB::editData($body["db"], $body["table"], $body["where"], $body["is"], $body["data"]);
+    $ok = DB_EDIT($body["db"], $body["table"], $body["where"], $body["is"], $body["data"]);
 
     if ($ok) {
         resp(200, "Data updated successfully.");
@@ -127,7 +125,6 @@ if ($do == "srv_run_one") {
 }
 
 if ($do == "srv_status") {
-
     if (isset($body["id"])) {
         $job = Srv::getJob((int)$body["id"]);
         resp(200, $job);
@@ -147,8 +144,6 @@ if ($do == "srv_logs") {
     }
 
     $lines = file($file, FILE_IGNORE_NEW_LINES);
-
-    // jede Zeile wieder als JSON decoden
     $entries = array_map(fn($l) => json_decode($l, true), $lines);
 
     resp(200, $entries);
@@ -157,4 +152,3 @@ if ($do == "srv_logs") {
 if ($do == "srv_jobs") {
     resp(200, Srv::getJobs());
 }
-

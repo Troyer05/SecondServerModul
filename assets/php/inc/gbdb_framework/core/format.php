@@ -2,68 +2,76 @@
 
 class Format {
     /**
-     * Formatiert ein Datum korrekt für ein HTML Input Feld des Typen date
-     * @param mixed $date das zu formatierende Datum
-     * @return mixed das korrekt formatierte Datum
+     * Prüft ob ein Datum valide parsebar ist
      */
-    public static function dateForInput(mixed $date): mixed {
-        return date('Y-m-d', strtotime($date));
+    private static function validDate(mixed $value): bool {
+        if (empty($value)) return false;
+
+        $ts = strtotime((string)$value);
+        return $ts !== false && $ts > 0;
     }
 
     /**
-     * Formatiert eine Uhrzeit korrekt für ein HTML Input Feld des Typen time
-     * @param mixed $time die zu formatierende Zeit
-     * @return mixed die korrekt formatierte Zeit
+     * Formatiert ein Datum für HTML <input type="date">
      */
-    public static function timeForInput(mixed $time): mixed {
-        return date('H:i:s', strtotime($time));
+    public static function dateForInput(mixed $date): string {
+        if (!self::validDate($date)) return "";
+        return date('Y-m-d', strtotime((string)$date));
     }
 
     /**
-     * Formatiert ein Datum korrekt zum Anzeigen für einen Nutzer
-     * @param mixed $date das zu formatierende Datum
-     * @return mixed das korrekt formatierte Datum
+     * Formatiert eine Zeit für HTML <input type="time">
      */
-    public static function dateToView(mixed $date) {
-        return date('d.m.Y', strtotime($date));
+    public static function timeForInput(mixed $time): string {
+        if (!self::validDate($time)) return "";
+        return date('H:i:s', strtotime((string)$time));
     }
 
     /**
-     * Schneidet einen String ab
-     * @param string $string der ab zu schneidende String
-     * @param int $width (Optional, standart 14) wie lang soll der String maximal sein
-     * @param int $shortBy (Optional, standart 14) Ab welchem Charackter soll der String abgeschnitten werden
-     * @return string der abgeschnittene String
+     * Formatiert ein Datum für User-Anzeige (dd.mm.yyyy)
      */
-    public static function shortString(string $string, int $width = 14, int $shortBy = 14): string {
-        if (strlen($string) <= $width) {
+    public static function dateToView(mixed $date): string {
+        if (!self::validDate($date)) return "";
+        return date('d.m.Y', strtotime((string)$date));
+    }
+
+    /**
+     * Schneidet String sauber ab
+     */
+    public static function shortString(
+        string $string,
+        int $maxLength = 14
+    ): string {
+        if (strlen($string) <= $maxLength) {
             return $string;
-        } else {
-            $shortString = substr($string, 0, $shortBy) . '....';
-            return $shortString;
         }
+
+        // 3 dots, so we remove 3 chars from content
+        $cut = $maxLength - 3;
+        if ($cut < 1) $cut = 1;
+
+        return substr($string, 0, $cut) . "...";
     }
 
     /**
-     * Entfernt alle Nichtalphabetische- und nichtnumerische Charackter aus einem String
-     * @param string $string der zu ändernde String
-     * @return string der modifizierte String
+     * Entfernt nicht-alphanumerische Zeichen (DE-kompatibel)
+     * Lässt äöüÄÖÜß zu
      */
     public static function cleanString(string $string): string {
-        return preg_replace("/[^a-zA-Z0-9]/", "", $string);
+        return preg_replace("/[^a-zA-Z0-9äöüÄÖÜß]/u", "", $string);
     }
 
     /**
-     * Konvertiert neue Zeilen Encodes von HTML zu INPUT und umgekehrt
-     * @param string $string der Text zum Konvertieren
-     * @param bool $forHTML Input zu HTML (true) | HTML zu Input (false)
-     * @return string der korrekt formatierte Text
-    */
+     * Konvertiert zwischen Text-Input und HTML <br>
+     */
     public static function newLineCode(string $string, bool $forHtml = true): string {
         if ($forHtml) {
-            return str_replace("\r\n", "<br>", $string);
+            // alle HTML break Varianten unterstützen
+            $string = str_replace(["\r\n", "\n\r", "\n"], "<br>", $string);
+            return $string;
         }
 
-        return str_replace("<br>", "\r\n", $string);
+        // HTML → Text
+        return str_ireplace(["<br>", "<br/>", "<br />"], "\r\n", $string);
     }
 }

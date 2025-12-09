@@ -1,172 +1,194 @@
 <?php
 
 class FS {
-    /**
-     * Schreibt JSON Daten in eine .json Datei
-     * @param string $file der path zur .json Datei
-     * @param mixed $data die JSON Daten als PHP Array, der in die Datei geschrieben werden soll
-     * @param bool $add (Optional, Standart true) sollen die Daten an die Datei angefügt werden (bei false wird überschrieben)
-     * @param bool $pretty (Optional, Standard false) sollen die JSON Daten schön Formatiert werden (bei false = Einzeiler)
-     * @return bool true wenn es keine Probleme gab
-     */
-    public static function write_json(string $file, mixed $data, bool $add = true, bool $pretty = false): bool {
-        $data = array_values($data);
+    /** Normalisiert Pfade sicher */
+    private static function normalizePath(string $file): string {
+        $base = rtrim(Vars::json_path(), "/") . "/";
+        return $base . ltrim($file, "/");
+    }
 
-        if ($add) {
-            $tmp = self::read_json($file);
-            array_push($tmp, $data);
-            $data = $tmp;
+    /** JSON sicher lesen */
+    public static function read_json(string $file): mixed {
+        $path = self::normalizePath($file);
+
+        if (!is_file($path)) {
+            return [];
         }
 
-        $file = Vars::json_path() . $file;
+        $content = @file_get_contents($path);
 
-        $pretty
-            ? file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT))
-            : file_put_contents($file, json_encode($data));
+        if ($content === false) {
+            error_log("[FS] Could not read file: {$path}");
+            return [];
+        }
+
+        $json = json_decode($content, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("[FS] JSON error in {$path}: " . json_last_error_msg());
+            return [];
+        }
+
+        return $json;
+    }
+
+    /**
+     * JSON sicher schreiben (atomic + lock)
+     */
+    public static function write_json(
+        string $file,
+        mixed $data,
+        bool $add = true,
+        bool $pretty = false
+    ): bool {
+        $path = self::normalizePath($file);
+
+        // Ordner sicherstellen
+        self::createFolder(dirname($path));
+
+        // Append mode
+        if ($add) {
+            $existing = self::read_json($file);
+
+            // Append muss strukturerhaltend sein
+            if (!is_array($existing)) {
+                $existing = [];
+            }
+
+            $existing[] = $data; // NICHT array_values() verwenden
+            $data = $existing;
+        }
+
+        // JSON encode
+        $flags = JSON_UNESCAPED_UNICODE;
+
+        if ($pretty) $flags |= JSON_PRETTY_PRINT;
+
+        $json = json_encode($data, $flags);
+
+        if ($json === false) {
+            error_log("[FS] Failed to encode JSON for {$path}");
+            return false;
+        }
+
+        // Atomic Write
+        $tmp = $path . "." . uniqid("tmp_", true);
+
+        if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
+            error_log("[FS] Failed to write temporary file {$tmp}");
+            return false;
+        }
+
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+            error_log("[FS] Failed to move {$tmp} to {$path}");
+
+            return false;
+        }
 
         return true;
     }
 
-    /**
-     * Liest JSON Daten aus einer .json Datei heraus und stellt sie PHP Formatiert bereit
-     * @param string $file der path zur .json Datei
-     * @return mixed die JSON Daten 
-     */
-    public static function read_json(string $file): mixed {
-        return json_decode(file_get_contents(Vars::json_path() . $file, true), true);
-    }
-
+    /** Sichere Ordner-Erstellung */
     public static function createFolder(string $pathAndName): void {
-        mkdir($pathAndName, 0777);
+        if (!is_dir($pathAndName)) {
+            @mkdir($pathAndName, 0777, true);
+        }
     }
 
-    /**
-     * Schreibt normale Dateien in eine Datei
-     * @param string $file path zur Datei
-     * @param mixed $data die Daten die in die Datei geschrieben werden sollen
-     * @param bool $stream (Optional, Standart false) ob es ein Filestream sein soll oder als stack etwa später geschrieben werden kann
-     * @param bool $overwrite (Optional, Standart false) ob Daten überschrieben werden sollen oder angehängt werden sollen
-     * @return bool true wenn es keine Probleme gab
-     */
+    /** File schreiben + Stream-Option */
     public static function write(string $file, mixed $data, bool $stream = false, bool $overwrite = false): bool {
+        self::createFolder(dirname($file));
+
         if ($stream) {
-            $f = ($overwrite ? fopen($file, 'w') : fopen($file, 'a+'));
+            $mode = $overwrite ? 'w' : 'a';
+            $f = @fopen($file, $mode);
+
+            if (!$f) {
+                error_log("[FS] Failed to open stream for {$file}");
+                return false;
+            }
+
             fwrite($f, $data);
             fclose($f);
 
             return true;
-        } else {
-            file_put_contents($file, $data);
-            return true;
         }
+
+        return file_put_contents($file, $data) !== false;
     }
 
-    /**
-     * Liest  Daten aus einer Datei heraus
-     * @param string $file der path zur Datei
-     * @return mixed die Daten
-     */
+    /** Datei lesen */
     public function read(string $file): mixed {
+        if (!is_file($file)) return "";
         return file_get_contents($file);
     }
 
-    /**
-     * Löscht ein Verzeichnis
-     * @param string $dir path zum Verzeichnis
-     * @return bool true wenn es keine Probleme gab
-     */
+    /** Sicheres rekursives Löschen eines Ordners */
     public static function deleteDirectory(string $dir): bool {
-        if (is_dir($dir)) {
-            $files = scandir($dir);
+        $dir = rtrim($dir, "/");
 
-            foreach ($files as $file) {
-                if ($file != "." && $file != "..") {
-                    $path = $dir . "/" . $file;
-
-                    if (is_dir($path)) {
-                        FS::deleteDirectory($path);
-                    } else {
-                        unlink($path);
-                    }
-                }
-            }
-
-            rmdir($dir);
-            return true;
+        // Schutz: gefährliche Pfade blockieren
+        if ($dir === "" || $dir === "/" || strlen($dir) < 2) {
+            error_log("[FS] Attempt to delete dangerous directory: {$dir}");
+            return false;
         }
 
-        return false;
+        if (!is_dir($dir)) {
+            return false;
+        }
+
+        foreach (scandir($dir) as $file) {
+            if ($file === "." || $file === "..") continue;
+
+            $path = $dir . "/" . $file;
+
+            if (is_dir($path)) {
+                self::deleteDirectory($path);
+            } else {
+                @unlink($path);
+            }
+        }
+
+        return @rmdir($dir);
     }
 
-    /**
-     * Gibt die Größe eines Verzeichnisses wieder
-     * @param string $path path zum Verzeichnis
-     * @return string die Größe des Verzeichnisses
-     */
+    /** Ordnergröße */
     public static function getFolderSize(string $path): string {
-        $size = 0;
-
-        if (!file_exists('assets/wasm/fssize.wasm')) {
-            die("FEHLER: fssize.wasm konnte nicht gefunden werden!");
+        if (!is_dir($path)) {
+            return "0 B";
         }
 
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST
-        );
+        $size = 0;
 
-        foreach ($iterator as $file) {
+        foreach (new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)
+        ) as $file) {
             $size += $file->getSize();
         }
 
-        if ($size >= 1125899906842624) { // PB
-            return number_format($size / 1125899906842624, 2) . ' PB';
-        } elseif ($size >= 1099511627776) { // TB
-            return number_format($size / 1099511627776, 2) . ' TB';
-        } elseif ($size >= 1073741824) { // GB
-            return number_format($size / 1073741824, 2) . ' GB';
-        } elseif ($size >= 1048576) { // MB
-            return number_format($size / 1048576, 2) . ' MB';
-        } elseif ($size >= 1024) { // KB
-            return number_format($size / 1024, 2) . ' KB';
-        } else {
-            return $size . ' B';
-        }
+        // Formatierung
+        return FileTool::dirSize($path);
     }
 
-    /**
-     * Löscht alle Dateien in einem Ordner
-     * @param string $path Path zum Ordner
-     * @return bool true wenn es keine Probleme gab
-    */
+    /** Löscht alle Dateien innerhalb eines Ordners */
     public static function deleteFiles(string $path): bool {
         if (!is_dir($path)) {
             return false;
         }
-    
-        $dir = opendir($path);
 
-        if (!$dir) {
-            return false;
-        }
-    
-        while (($file = readdir($dir)) !== false) {
-            if ($file == '.' || $file == '..') {
-                continue;
-            }
-    
-            $filePath = $path . DIRECTORY_SEPARATOR . $file;
-    
+        foreach (scandir($path) as $file) {
+            if ($file === "." || $file === "..") continue;
+
+            $filePath = $path . "/" . $file;
+
             if (is_file($filePath)) {
-                if (!unlink($filePath)) {
-                    closedir($dir);
+                if (!@unlink($filePath)) {
                     return false;
                 }
             }
         }
-    
-        closedir($dir);
-        
+
         return true;
     }
 }

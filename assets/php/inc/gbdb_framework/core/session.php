@@ -1,92 +1,98 @@
 <?php
 
 class Session {
-    /**
-     * Erneuert die Session
-     * @internal used by Framework
-     */
-    public static function renew_session(): void {
-        session_abort();
-        ini_set('session.gc_maxlifetime', 0);
-        
-        $days = 360;
-        $lifetime = $days * 24 * 60 * 60;
-        
-        session_set_cookie_params($lifetime);
-        session_cache_expire($days);
-        session_start();
-
-        if (isset($_SESSION['created'])) {
-            $renewThreshold = 30 * 24 * 60 * 60;
-
-            if (time() - $_SESSION['created'] > $lifetime - $renewThreshold) {
-                $_SESSION['created'] = time();
-                session_regenerate_id(true);
-            }
-        } else {
-            $_SESSION['created'] = time();
-        }
-    }
 
     /**
-     * Behandeln der Session
-     * @internal used by Framework
+     * Startet die Session sicher, falls sie nicht aktiv ist.
+     * Aktiviert sichere Cookie-Parameter.
      */
     public static function handler(): void {
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            self::renew_session();
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            return;
         }
 
-        if (session_status() === PHP_SESSION_NONE) {
-            self::renew_session();
+        // Sichere Cookie-Settings
+        session_set_cookie_params([
+            "lifetime" => 360 * 24 * 60 * 60, // 360 Tage
+            "path" => "/",
+            "secure" => isset($_SERVER["HTTPS"]), 
+            "httponly" => true,
+            "samesite" => "Lax"
+        ]);
+
+        session_start();
+
+        // Wenn neue Session → Metadata setzen
+        if (!isset($_SESSION["_created"])) {
+            $_SESSION["_created"] = time();
+            $_SESSION["_last_regen"] = time();
+        }
+
+        self::autoRegenerate();
+    }
+
+
+    /**
+     * Regeneriert regelmäßig die Session-ID zum Schutz vor Hijacking.
+     */
+    private static function autoRegenerate(): void {
+        $interval = 60 * 30; // alle 30 Minuten regenerieren
+
+        if (time() - ($_SESSION["_last_regen"] ?? 0) > $interval) {
+            session_regenerate_id(true);
+            $_SESSION["_last_regen"] = time();
         }
     }
 
+
     /**
-     * initialisierung der initialen Session Variablen
-     * @internal used by Framework
+     * Initialisiert alle Framework-Session-Werte aus Vars::init_session()
      */
     public static function init(): void {
-        foreach (Vars::init_session() as $i => $r) {
-            $_SESSION[$r["session_name"]] = $r["session_value"];
+        foreach (Vars::init_session() as $entry) {
+            $_SESSION[$entry["session_name"]] = $entry["session_value"];
         }
     }
 
-    /**
-     * Gibt den Inhalt einer Session Variable zurück
-     * @param string $name Name der Session Variable
-     * @return mixed INhalt der Session Variable
-     */
-    public static function get(string $name): mixed {
-        return $_SESSION[$name];
-    }
 
     /**
-     * Erstellt oder bearbeitet eine Session Variable
-     * @param string $name Name der Session Variable
-     * @param mixed $value Inhalt der Session Variable
+     * Holt den Wert einer Session-Variable
      */
-    public static function add_or_edit(string $name, mixed $value): void {
+    public static function get(string $name): mixed {
+        return $_SESSION[$name] ?? null;
+    }
+
+
+    /**
+     * Setzt oder überschreibt eine Session-Variable
+     */
+    public static function set(string $name, mixed $value): void {
         $_SESSION[$name] = $value;
     }
 
+
     /**
-     * Löscht eine Session Variable
-     * @param string $name Name der zu löschenden Session Variable
+     * Prüft ob Session-Variable existiert
      */
-    public static function delete(string $name): void {
-        $_SESSION[$name] = null;
-        
-        if (isset($_SESSION[$name])) {
-            unset($_SESSION[$name]);
-        }
+    public static function exists(string $name): bool {
+        return array_key_exists($name, $_SESSION);
     }
 
-    public static function exists(string $name): bool {
-        if (isset($_SESSION[$name])) {
-            return true;
-        }
 
-        return false;
+    /**
+     * Löscht eine Session-Variable
+     */
+    public static function delete(string $name): void {
+        unset($_SESSION[$name]);
+    }
+
+
+    /**
+     * Zerstört die ganze Session (Logout)
+     */
+    public static function destroy(): void {
+        session_unset();
+        session_destroy();
     }
 }

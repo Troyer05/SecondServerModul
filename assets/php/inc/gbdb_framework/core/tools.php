@@ -2,275 +2,324 @@
 
 class Tools {
     /**
-     * Generiert ein Passwort
-     * 
-     * @param int $length Länge des Passwort als Integer
-     * @return string Das generierte Passwort
+     * Generiert ein (kryptografisch) sicheres Passwort
+     *
+     * @param int $length Länge des Passworts
      */
     public static function generatePassword(int $length): string {
-        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}|:<>?-=[];,./';
-        $password = '';
-    
-        for ($i = 0; $i < $length; $i++) {
-            $password .= $chars[rand(0, strlen($chars) - 1)];
+        if ($length <= 0) {
+            return '';
         }
-    
+
+        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}|:<>?-=[];,./';
+        $maxIndex = strlen($chars) - 1;
+        $password = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $idx = random_int(0, $maxIndex);
+            $password .= $chars[$idx];
+        }
+
         return $password;
     }
 
     /**
-     * Testet eine Passwort Stärke
-     * 
-     * @param string $password Das zu testende Passwort
-     * @return string Angabe welche Schwäsche auf zu weisen ist
+     * Testet eine Passwortstärke
+     *
+     * @return string Beschreibung, was ggf. noch fehlt
      */
     public static function testPasswordStrength(string $password): string {
         if (strlen($password) < 8) {
-            return 'It would be good, if the password would have 8 charackters or more.';
+            return 'It would be good if the password had 8 characters or more.';
         }
-    
+
         if (!preg_match('/[a-z]/', $password) || !preg_match('/[A-Z]/', $password)) {
-            return 'It would be good, to add camlcase characters.';
+            return 'It would be good to add both lowercase and uppercase characters.';
         }
-    
+
         if (!preg_match('/\d/', $password)) {
-            return 'It would be good, if the password would have one or more numbers.';
+            return 'It would be good if the password had one or more numbers.';
         }
-    
+
         if (!preg_match('/[^a-zA-Z0-9]/', $password)) {
-            return 'It would be good, if the password would contain a non-alphabetic charackter.';
+            return 'It would be good if the password contained a non-alphanumeric character.';
         }
-    
+
         return 'This password is strong.';
     }
 
     /**
-     * Findes WHOIS Daten über eine Domain heraus
-     * 
-     * @param string $domain Domain
-     * @return mixed Domain Daten
+     * Sicheres WHOIS für eine Domain (shell_exec mit Sanitizing)
+     *
+     * @return string JSON mit success|error
      */
     public static function getDomainInfo(string $domain): mixed {
-        if (filter_var($domain, FILTER_VALIDATE_DOMAIN)) {
-            $whois = shell_exec("whois $domain");
-            return json_encode(array("success" => $whois));
-        } else {
-            return json_encode(array("error" => "That domain does not exist."));
+        $domain = trim(strtolower($domain));
+
+        if (
+            !filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) ||
+            !preg_match('/^[a-z0-9.-]+$/', $domain)
+        ) {
+            return json_encode(["error" => "That domain does not exist."]);
         }
+
+        if (!function_exists('shell_exec')) {
+            return json_encode(["error" => "whois is not available on this system."]);
+        }
+
+        $cmd = 'whois ' . escapeshellarg($domain) . ' 2>/dev/null';
+        $whois = shell_exec($cmd);
+
+        if ($whois === null || $whois === false || $whois === '') {
+            return json_encode(["error" => "Could not get whois data."]);
+        }
+
+        return json_encode(["success" => $whois]);
     }
 
     /**
-     * Generiert eine ID
-     * 
-     * @return int ID
+     * Generiert eine inkrementelle ID (filebasiert, mit Locking)
      */
     public static function generateId(): int {
-        $tmpFile = "../../" . Vars::json_path() . 'framework_temp/_id.txt';
+        $tmpFile = self::getFrameworkTempFile('_id.txt');
 
-        if (!file_exists($tmpFile)) {
-            file_put_contents($tmpFile, '');
+        self::ensureDir(dirname($tmpFile));
+
+        $fp = @fopen($tmpFile, 'c+');
+
+        if (!$fp) {
+            // Fallback: zufällige ID
+            return random_int(1, PHP_INT_MAX);
         }
 
-        $use_id = file($tmpFile);
-        $id = 0;
+        // Exklusiver Lock
+        flock($fp, LOCK_EX);
 
-        foreach ($use_id as $n) {
-            $id = $n + 1;
-        }
+        $contents = trim(stream_get_contents($fp));
+        $lastId = ($contents !== '') ? (int)$contents : 0;
+        $newId = $lastId + 1;
 
-        file_put_contents($tmpFile, $id . "\n", FILE_APPEND);
+        // Datei zurücksetzen und neue ID schreiben
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, (string)$newId);
+        fflush($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
 
-        return $id;
+        return $newId;
     }
 
     /**
-     * Generiert einen Token
-     * 
-     * @param string $delimiter (OPTIONAL) Trennzeichen zwischen den Tokenfragmenten (STANDARD: -)
-     * @param int $many (OPTIONAL) Anzahl der Token die generiert werden sollen (STANDARD: 1)
-     * @param int $fragments (OPTIONAL) Anzahl der Tokenfragmente (STANDARD: 1)
+     * Generiert einen Token (Dateibasierter Duplicate-Schutz)
+     *
+     * @param string $delimiter Trennzeichen zwischen Fragmenten
+     * @param int $many Anzahl Tokens
+     * @param int $fragments Anzahl an Fragmenten pro Token
      * @return array Generierte Tokens
      */
     public static function generateToken(string $delimiter = "-", int $many = 1, int $fragments = 4): array {
-        $tmpFile = "../../" .  Vars::json_path() . 'framework_temp/_tokens.txt';
-        $token_array = [];
-        $tokens = [];
-        $xn = 0;
-    
-        if (!file_exists($tmpFile)) {
-            file_put_contents($tmpFile, '');
-        }
-    
-        for ($i = 0; $i < $many; $i++) {
-            $token = "";
-    
-            for ($j = 0; $j < $fragments; $j++) {
-                $token_array[$j] = hash('adler32', strval(rand(0, 4096)));
-                $token .= $token_array[$j] . $delimiter;
-            }
-    
-            $token = rtrim($token, $delimiter);
-            $use_token = file($tmpFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            $result = $token;
-            $write = true;
-    
-            foreach ($use_token as $n) {
-                if (trim($n) === $token) {
-                    $result = "T_A_E";
-                    $write = false;
-
-                    break;
-                }
-            }
-    
-            if ($write) {
-                file_put_contents($tmpFile, $result . "\n", FILE_APPEND);
-
-                $tokens[] = $result;
-                $xn++;
-            } else {
-                $i--;
-            }
-        }
-    
-        return $tokens;
+        return self::generateTokenInternal($delimiter, $many, $fragments);
     }
 
-    public static function generateTokenExt(string $delimiter = "-", int $many = 1, int $fragments = 4): array {
-        $tmpFile = Vars::json_path() . 'framework_temp/_tokens.txt';
-        $token_array = [];
-        $tokens = [];
-        $xn = 0;
-    
-        if (!file_exists($tmpFile)) {
-            file_put_contents($tmpFile, '');
-        }
-    
-        for ($i = 0; $i < $many; $i++) {
-            $token = "";
-    
-            for ($j = 0; $j < $fragments; $j++) {
-                $token_array[$j] = hash('adler32', strval(rand(0, 1024)));
-                $token .= $token_array[$j] . $delimiter;
-            }
-    
-            $token = rtrim($token, $delimiter);
-            $use_token = file($tmpFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            $result = $token;
-            $write = true;
-    
-            foreach ($use_token as $n) {
-                if (trim($n) === $token) {
-                    $result = "T_A_E";
-                    $write = false;
-
-                    break;
-                }
-            }
-    
-            if ($write) {
-                file_put_contents($tmpFile, $result . "\n", FILE_APPEND);
-
-                $tokens[] = $result;
-                $xn++;
-            } else {
-                $i--;
-            }
-        }
-    
-        return $tokens;
-    }
-    
     /**
-     * Findet heraus, aus welchem Land eine IP stammt
-     * 
-     * @param string $ip IP Adresse
-     * @return mixed IP Land
+     * Erweiterte Token-Variante (gleiche Logik, anderer historischer Pfad)
+     */
+    public static function generateTokenExt(string $delimiter = "-", int $many = 1, int $fragments = 4): array {
+        // Für Kompatibilität gleiche Logik, gleicher Speicherort
+        return self::generateTokenInternal($delimiter, $many, $fragments);
+    }
+
+    /**
+     * IP → Land (nutzt Http::get statt rohem cURL)
      */
     public static function getIpCountry(string $ip): string {
-        $url = 'https://api.country.is/' . $ip;
-        $ch = curl_init();
-
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-        $content = curl_exec($ch);
-        curl_close($ch);
-
-        $json = json_decode($content);
-        $out = $json->country;
-
-        if (!$out || $out == null || $out == "") {
-            $out = "Invalid IP.";
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return "Invalid IP.";
         }
 
-        return $out;
+        $url = 'https://api.country.is/' . urlencode($ip);
+        $response = Http::get($url);
+
+        if ($response === false) {
+            return "Invalid IP.";
+        }
+
+        $json = json_decode($response, true);
+        $country = $json['country'] ?? null;
+
+        if (!$country || $country === "") {
+            return "Invalid IP.";
+        }
+
+        return $country;
     }
 
     /**
-     * Prüft die Verbindung zu einer IPv4 Adresse
-     * 
-     * @param string $ip IPv4 Adresse
-     * @return string Erreichbarkeitsstatus
+     * IPv4-Ping (sicher, OS-aware)
      */
     public static function ping4(string $ip): string {
-        exec("ping " . $ip, $output, $status);
-
-        if ($status === 0) {
-            $out = $ip . " erreichbar.";
-        } else {
-            $out = $ip . " nicht erreichbar!";
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return $ip . " nicht erreichbar!";
         }
 
-        return $out;
+        $escapedIp = escapeshellarg($ip);
+
+        $cmd = (PHP_OS_FAMILY === 'Windows')
+            ? "ping -n 1 $escapedIp"
+            : "ping -c 1 $escapedIp 2>/dev/null";
+
+        @exec($cmd, $output, $status);
+
+        if ($status === 0) {
+            return $ip . " erreichbar.";
+        }
+
+        return $ip . " nicht erreichbar!";
     }
 
     /**
-     * Prüft die Verbindung zu einer IPv6 Adresse
-     * 
-     * @param string $ip IPv6 Adresse
-     * @return string Erreichbarkeitsstatus
+     * IPv6-Ping (sicher, OS-aware)
      */
     public static function ping6(string $ip): string {
-        exec("ping [" . $ip . "]", $output, $status);
-
-        if ($status === 0) {
-            $out = $ip . " erreichbar.";
-        } else {
-            $out = $ip . " nicht erreichbar!";
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            return $ip . " nicht erreichbar!";
         }
 
-        return $out;
+        $escapedIp = escapeshellarg($ip);
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $cmd = "ping -n 1 -6 $escapedIp";
+        } else {
+            // Viele Systeme: ping -6, manche ping6 – wir versuchen ping -6
+            $cmd = "ping -c 1 -6 $escapedIp 2>/dev/null";
+        }
+
+        @exec($cmd, $output, $status);
+
+        if ($status === 0) {
+            return $ip . " erreichbar.";
+        }
+
+        return $ip . " nicht erreichbar!";
     }
 
     /**
-     * Erstellt einen QR Code
-     * 
-     * @param string $value Inhalt des QR Codes
-     * @param int $width Width in PX
-     * @param int $height Height in PX
-     * @return string HTML um den QR Code an zu zeigen
+     * Erstellt einen QR Code (iframe Wrapper)
      */
     public static function qr(string $value, int $width, int $height): string {
+        $width  = max(1, $width);
+        $height = max(1, $height);
+
         $params = "?width=" . $width . "&height=" . $height . "&correctlevel=H";
         $params .= "&zielurl=" . urlencode($value);
         $style = "border: none; width: " . $width . "px; height: " . $height . "px;";
-    
-        return '<iframe style="' . $style . '" src="assets/tool_apis/qrcode.api.php' . $params . '"></iframe>';
-    }    
+
+        return '<iframe style="' . htmlspecialchars($style, ENT_QUOTES) . '" src="assets/tool_apis/qrcode.api.php' . $params . '"></iframe>';
+    }
 
     /**
-     * Erstellt einen BAR Code
-     * 
-     * @param string $value Inhalt des BAR Codes
-     * @param int $width Width in PX
-     * @param int $height (OPTIONAL) Height in PX (STANDARD: 175)
-     * @return string HTML um den BAR Code an zu zeigen
+     * Erstellt einen BAR Code (iframe Wrapper)
      */
-    public static function bar(string $value, int $width, int $height = 175): string {
+    public static function bar(string $value, int $width, int $height = 175): string  {
+        $width  = max(1, $width);
+        $height = max(1, $height);
+
         $params = "?value=" . urlencode($value);
         $style = "border: none; width: " . $width . "px; height: " . $height . "px;";
-    
-        return '<iframe style="' . $style . '" src="assets/tool_apis/barcode.api.php' . $params . '"></iframe>';
-    }    
+
+        return '<iframe style="' . htmlspecialchars($style, ENT_QUOTES) . '" src="assets/tool_apis/barcode.api.php' . $params . '"></iframe>';
+    }
+
+    // =====================================================
+    //  INTERNAL HELPER
+    // =====================================================
+
+    /**
+     * Gemeinsame Token-Generierung (cryptographically secure)
+     */
+    private static function generateTokenInternal(string $delimiter, int $many, int $fragments): array {
+        $tmpFile = self::getFrameworkTempFile('_tokens.txt');
+
+        self::ensureDir(dirname($tmpFile));
+
+        $tokens = [];
+        $existing = [];
+
+        // Bestehende Tokens laden (für Duplicate-Schutz)
+        if (file_exists($tmpFile)) {
+            $existing = file($tmpFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        }
+
+        $fp = @fopen($tmpFile, 'a+');
+
+        if (!$fp) {
+            // Fallback: trotzdem Tokens liefern, aber nicht persistieren
+            for ($i = 0; $i < $many; $i++) {
+                $tokens[] = self::buildToken($delimiter, $fragments);
+            }
+
+            return $tokens;
+        }
+
+        flock($fp, LOCK_EX);
+
+        for ($i = 0; $i < $many; $i++) {
+            do {
+                $token = self::buildToken($delimiter, $fragments);
+            } while (in_array($token, $existing, true));
+
+            $existing[] = $token;
+            $tokens[]   = $token;
+
+            fwrite($fp, $token . PHP_EOL);
+        }
+
+        fflush($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+
+        return $tokens;
+    }
+
+    /**
+     * Baut ein einzelnes Token aus n Fragmenten
+     */
+    private static function buildToken(string $delimiter, int $fragments): string {
+        $parts = [];
+
+        for ($j = 0; $j < $fragments; $j++) {
+            // 8 Hex-Zeichen pro Fragment (32-bit)
+            $parts[] = bin2hex(random_bytes(4));
+        }
+
+        return implode($delimiter, $parts);
+    }
+
+    /**
+     * Liefert den Pfad zum framework_temp-Verzeichnis (mit Legacy-Unterstützung)
+     */
+    private static function getFrameworkTempFile(string $filename): string {
+        // Neuer, sauberer Pfad
+        $base = rtrim(Vars::json_path(), '/\\') . '/framework_temp/';
+
+        // Legacy Pfad (wie früher in deiner Klasse)
+        $legacyBase = "../../" . rtrim(Vars::json_path(), '/\\') . '/framework_temp/';
+
+        // Wenn Legacy-Verzeichnis existiert und neuer noch nicht → Legacy weiter verwenden
+        if (!is_dir($base) && is_dir($legacyBase)) {
+            return $legacyBase . $filename;
+        }
+
+        return $base . $filename;
+    }
+
+    /**
+     * Stellt sicher, dass ein Verzeichnis existiert
+     */
+    private static function ensureDir(string $dir): void {
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+    }
 }

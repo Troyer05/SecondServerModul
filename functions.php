@@ -35,11 +35,50 @@ function test_token($token) {
     $tokens = GBDB::getData("main", "t");
 
     foreach ($tokens as $_token) {
-        if ($_token["token"] == $token) {
-            GBDB::deleteData("main", "t", "token", $token);
+        if (Crypt::decode($_token["token"]) == $token) {
+            GBDB::deleteData("main", "t", "token", Crypt::encode($token));
             return true;
         }
     }
 
     return false;
+}
+
+function DB_GET($db, $table, $filter = false, $where = "", $is = "") {
+    if (DB_ARCH === "SQL") {
+        SQL::connect();
+        if ($filter) {
+            return SQL::select($table, "*", $where, "'$is'");
+        }
+        return SQL::select($table);
+    }
+
+    return GBDB::getData($db, $table, $filter, $where, $is);
+}
+
+function DB_PUT($db, $table, $data) {
+    if (DB_ARCH === "SQL") {
+        SQL::connect();
+        return SQL::insert($table, $data);
+    }
+    
+    return GBDB::insertData($db, $table, $data);
+}
+
+function DB_EDIT($db, $table, $where, $is, $data) {
+    if (DB_ARCH === "SQL") {
+        SQL::connect();
+        return SQL::update($table, $data, $where, $is);
+    }
+    
+    return GBDB::editData($db, $table, $where, $is, $data);
+}
+
+function DB_DELETE($db, $table, $where, $is) {
+    if (DB_ARCH === "SQL") {
+        SQL::connect();
+        return SQL::delete($table, $where, $is);
+    }
+    
+    return GBDB::deleteData($db, $table, $where, $is);
 }
