@@ -5,9 +5,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>greenbucket StoreIT</title>
+    <title>GBDB UI</title>
     <link rel="stylesheet" href="assets/css/greenql_ui.css">
-    <link rel="icon" type="image/x-icon" href="assets/img/logo.png">
 </head>
 
 <body>
