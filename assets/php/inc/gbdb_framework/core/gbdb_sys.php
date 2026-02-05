@@ -1,19 +1,261 @@
 <?php
 
-// HERZ STÜCK !!!!!!
+// HERZ STÜCK !!!!!! 
 
 class GBDB {
+
+    /* ============================================================
+       NAME-OBFUSCATION (deterministisch) + Index-Mapping
+       ============================================================ */
+
+    /**
+     * Deterministischer, geheimnisbasierter "Name-Token" (nicht reversibel).
+     * -> stabil (immer gleich), aber ohne Key praktisch nicht erratbar.
+     */
+    private static function nameToken(string $plain, string $ns = 'g'): string {
+        $plain = (string)$plain;
+        $key   = (string)Vars::cryptKey();
+
+        // Namespace hilft Kollisionen DB vs Table vs Meta zu vermeiden
+        $data  = $ns . '|' . $plain;
+
+        $raw = hash_hmac('sha256', $data, $key, true);
+        $b64 = base64_encode($raw);
+
+        // URL-/FS-safe Base64
+        $safe = rtrim(strtr($b64, '+/', '-_'), '=');
+
+        // Prefix, damit es nicht "zufällig wie ein normaler Name" aussieht
+        return 'gb_' . $safe;
+    }
+
+    /**
+     * Pfad zur globalen DB-Index-Datei (liegt im GBDB Root).
+     * Dateiname ist ebenfalls tokenisiert.
+     */
+    private static function dbIndexFile(): string {
+        return Vars::DB_PATH() . self::nameToken('__db_index__', 'meta') . Vars::data_extension();
+    }
+
+    /**
+     * Pfad zur Table-Index-Datei innerhalb einer DB (Ordner).
+     * Dateiname ist ebenfalls tokenisiert.
+     */
+    private static function tableIndexFileByDbToken(string $dbToken): string {
+        $dir = Vars::DB_PATH() . $dbToken . "/";
+        return $dir . self::nameToken('__table_index__', 'meta') . Vars::data_extension();
+    }
+
+    /**
+     * Liest ein Index-File (als Mapping plain => token).
+     * Intern ist es eine GBDB-Tabelle (Header + Zeilen).
+     */
+    private static function readIndex(string $file): array {
+        $rows = self::ini($file);
+
+        if (empty($rows) || !isset($rows[0]) || !is_array($rows[0])) {
+            return [];
+        }
+
+        // Header entfernen
+        unset($rows[0]);
+        $rows = array_values($rows);
+
+        $map = [];
+
+        foreach ($rows as $r) {
+            if (!is_array($r)) continue;
+            if (!isset($r['plain'], $r['token'])) continue;
+
+            $p = (string)$r['plain'];
+            $t = (string)$r['token'];
+
+            if ($p !== "" && $t !== "") {
+                $map[$p] = $t;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Schreibt ein Index-File (Mapping plain => token) als GBDB-Tabelle.
+     */
+    private static function writeIndex(string $file, array $map): bool {
+        // Header
+        $db = [];
+        $db[] = [
+            "id"    => -1,
+            "plain" => "-header-",
+            "token" => "-header-",
+        ];
+
+        $id = 0;
+        foreach ($map as $plain => $token) {
+            $db[] = [
+                "id"    => $id++,
+                "plain" => (string)$plain,
+                "token" => (string)$token,
+            ];
+        }
+
+        return self::writeTable($file, $db);
+    }
+
+    /**
+     * Liefert (und optional erstellt) den DB-Token für einen Klartext-DB-Namen.
+     */
+    private static function getDbToken(string $dbPlain, bool $ensure = false): ?string {
+        $dbPlain = Format::cleanString($dbPlain);
+        if ($dbPlain === "") return null;
+
+        // Wenn crypt aus ist: "token" ist schlicht der Name
+        if (!Vars::crypt_data()) {
+            return $dbPlain;
+        }
+
+        $idxFile = self::dbIndexFile();
+        $map     = self::readIndex($idxFile);
+
+        if (isset($map[$dbPlain])) {
+            return $map[$dbPlain];
+        }
+
+        if (!$ensure) {
+            return null;
+        }
+
+        // neuen Token anlegen
+        $token = self::nameToken('db:' . $dbPlain, 'db');
+
+        // Collision-Guard (sehr unwahrscheinlich, aber sauber)
+        $used = array_flip(array_values($map));
+        if (isset($used[$token])) {
+            $n = 2;
+            do {
+                $token2 = self::nameToken('db:' . $dbPlain . '#'.$n, 'db');
+                $n++;
+            } while (isset($used[$token2]));
+            $token = $token2;
+        }
+
+        $map[$dbPlain] = $token;
+
+        if (!self::writeIndex($idxFile, $map)) {
+            return null;
+        }
+
+        return $token;
+    }
+
+    /**
+     * Liefert (und optional erstellt) den Table-Token für einen Klartext-Tabellennamen.
+     */
+    private static function getTableToken(string $dbPlain, string $tablePlain, bool $ensure = false): ?string {
+        $dbPlain    = Format::cleanString($dbPlain);
+        $tablePlain = Format::cleanString($tablePlain);
+
+        if ($dbPlain === "" || $tablePlain === "") return null;
+
+        if (!Vars::crypt_data()) {
+            return $tablePlain;
+        }
+
+        $dbToken = self::getDbToken($dbPlain, $ensure);
+        if ($dbToken === null) return null;
+
+        $idxFile = self::tableIndexFileByDbToken($dbToken);
+        $map     = self::readIndex($idxFile);
+
+        if (isset($map[$tablePlain])) {
+            return $map[$tablePlain];
+        }
+
+        if (!$ensure) {
+            return null;
+        }
+
+        $token = self::nameToken('tbl:' . $dbPlain . '|' . $tablePlain, 'tbl');
+
+        // Collision-Guard
+        $used = array_flip(array_values($map));
+        if (isset($used[$token])) {
+            $n = 2;
+            do {
+                $token2 = self::nameToken('tbl:' . $dbPlain . '|' . $tablePlain . '#'.$n, 'tbl');
+                $n++;
+            } while (isset($used[$token2]));
+            $token = $token2;
+        }
+
+        $map[$tablePlain] = $token;
+
+        if (!self::writeIndex($idxFile, $map)) {
+            return null;
+        }
+
+        return $token;
+    }
+
+    /**
+     * Entfernt eine Tabelle aus dem Table-Index einer DB (wenn crypt aktiv ist).
+     */
+    private static function dropTableFromIndex(string $dbPlain, string $tablePlain): void {
+        if (!Vars::crypt_data()) return;
+
+        $dbToken = self::getDbToken($dbPlain, false);
+        if ($dbToken === null) return;
+
+        $idxFile = self::tableIndexFileByDbToken($dbToken);
+        $map     = self::readIndex($idxFile);
+
+        if (isset($map[$tablePlain])) {
+            unset($map[$tablePlain]);
+            self::writeIndex($idxFile, $map);
+        }
+    }
+
+    /**
+     * Löscht (wenn möglich) die Table-Index-Datei einer DB.
+     * Wird z.B. bei deleteAll verwendet.
+     */
+    private static function removeTableIndexIfExists(string $dbPlain): void {
+        if (!Vars::crypt_data()) return;
+
+        $dbToken = self::getDbToken($dbPlain, false);
+        if ($dbToken === null) return;
+
+        $idxFile = self::tableIndexFileByDbToken($dbToken);
+        if (is_file($idxFile)) {
+            @unlink($idxFile);
+        }
+    }
+
+
+    /* ============================================================
+       CORE IO
+       ============================================================ */
+
     /**
      * Erstellt den Pfad zur Datenbank / Tabelle
      * @internal Used by Framework
      */
-    private static function makePath(string $database, string $table): string {
+    private static function makePath(string $database, string $table, bool $ensure = false): string {
         $table    = Format::cleanString($table);
         $database = Format::cleanString($database);
 
         if (Vars::crypt_data()) {
-            $table    = Crypt::encode($table);
-            $database = Crypt::encode($database);
+            $dbToken = self::getDbToken($database, $ensure);
+            $tbToken = self::getTableToken($database, $table, $ensure);
+
+            // Wenn nicht vorhanden (und ensure=false), bewusst "ins Leere" zeigen,
+            // damit file_exists etc. sauber false ergibt.
+            if ($dbToken === null || $tbToken === null) {
+                return Vars::DB_PATH() . "__missing__/" . "__missing__" . Vars::data_extension();
+            }
+
+            $table    = $tbToken;
+            $database = $dbToken;
         }
 
         $table    .= Vars::data_extension();
@@ -68,7 +310,7 @@ class GBDB {
         }
 
         $json = json_encode($db, Vars::jpretty());
-        
+
         if ($json === false) {
             error_log("[GBDB] json_encode() fehlgeschlagen für: {$file}");
             return false;
@@ -91,7 +333,6 @@ class GBDB {
         if (!@rename($tmp, $file)) {
             @unlink($tmp);
             error_log("[GBDB] Konnte {$tmp} nicht nach {$file} verschieben");
-        
             return false;
         }
 
@@ -116,15 +357,17 @@ class GBDB {
         return $id;
     }
 
+
+    /* ============================================================
+       PUBLIC API
+       ============================================================ */
+
     /**
      * Erstellt eine GBDB Datenbank
      */
     public static function createDatabase(string $name): bool {
         $name = Format::cleanString($name);
-
-        if (Vars::crypt_data()) {
-            $name = Crypt::encode($name);
-        }
+        if ($name === "") return false;
 
         $base = Vars::DB_PATH();
 
@@ -132,12 +375,20 @@ class GBDB {
             @mkdir($base, 0777, true);
         }
 
-        $path = $base . $name;
+        // crypt: Token stabil über Index (keine random-IV Encode)
+        $dirName = Vars::crypt_data()
+            ? self::getDbToken($name, true)
+            : $name;
+
+        if ($dirName === null) return false;
+
+        $path = $base . $dirName;
 
         if (!is_dir($path)) {
             return @mkdir($path, 0777);
         }
 
+        // existiert schon
         return false;
     }
 
@@ -146,19 +397,37 @@ class GBDB {
      */
     public static function deleteDatabase(string $name): bool {
         $name = Format::cleanString($name);
+        if ($name === "") return false;
 
-        if (Vars::crypt_data()) {
-            $name = Crypt::encode($name);
-        }
+        $dirName = Vars::crypt_data()
+            ? self::getDbToken($name, false)
+            : $name;
 
-        $path = Vars::DB_PATH() . $name;
+        if ($dirName === null) return false;
+
+        $path = Vars::DB_PATH() . $dirName;
 
         if (is_dir($path)) {
-            // Nur löschen, wenn leer
             $files = scandir($path);
 
-            if ($files && count(array_diff($files, ['.', '..'])) === 0) {
-                return @rmdir($path);
+            if ($files) {
+                $rest = array_diff($files, ['.', '..']);
+
+                // Wenn crypt aktiv ist, erlauben wir das Löschen auch,
+                // wenn NUR die Table-Index-Datei vorhanden ist.
+                if (Vars::crypt_data()) {
+                    $idx = basename(self::tableIndexFileByDbToken($dirName));
+                    $rest = array_values($rest);
+
+                    if (count($rest) === 1 && $rest[0] === $idx) {
+                        @unlink($path . "/" . $idx);
+                        return @rmdir($path);
+                    }
+                }
+
+                if (count($rest) === 0) {
+                    return @rmdir($path);
+                }
             }
         }
 
@@ -169,7 +438,8 @@ class GBDB {
      * Erstellt eine GBDB Tabelle in einer GBDB Datenbank
      */
     public static function createTable(string $database, string $table, array $cols): bool {
-        $file = self::makePath($database, $table);
+        // ensure=true: wir wollen Namen-Token + Index anlegen, falls noch nicht da
+        $file = self::makePath($database, $table, true);
 
         if (!file_exists($file)) {
             // Header-Zeile
@@ -194,7 +464,14 @@ class GBDB {
         $file = self::makePath($database, $table);
 
         if (file_exists($file)) {
-            return @unlink($file);
+            $ok = @unlink($file);
+
+            // Index updaten
+            if ($ok) {
+                self::dropTableFromIndex($database, $table);
+            }
+
+            return $ok;
         }
 
         return false;
@@ -285,7 +562,6 @@ class GBDB {
             }
         }
 
-        // Indexe neu setzen
         if ($return) {
             $db = array_values($db);
             return self::writeTable($file, $db);
@@ -357,9 +633,7 @@ class GBDB {
             return [];
         }
 
-        // Header entfernen
         unset($db[0]);
-
         $db = array_values($db);
 
         return $db;
@@ -389,28 +663,33 @@ class GBDB {
      * Gibt alle Datenbanken zurück, die existieren
      */
     public static function listDBs(): array {
-        $d    = Vars::DB_PATH();
-        $dirs = [];
+        $d = Vars::DB_PATH();
+        if (!is_dir($d)) return [];
 
-        if (!is_dir($d)) {
-            return [];
-        }
-
-        $tmp = array_filter(scandir($d), function ($f) use ($d) {
-            return $f !== '.' && $f !== '..' && is_dir($d . $f);
-        });
-
-        foreach ($tmp as $db_name) {
-            if (Vars::crypt_data()) {
-                $db_name = Crypt::decode($db_name);
-            }
-
-            if ($db_name !== null && $db_name !== "") {
+        // Wenn crypt aus: normaler scan
+        if (!Vars::crypt_data()) {
+            $dirs = [];
+            $tmp = array_filter(scandir($d), function ($f) use ($d) {
+                return $f !== '.' && $f !== '..' && is_dir($d . $f);
+            });
+            foreach ($tmp as $db_name) {
                 $dirs[] = $db_name;
             }
+            return $dirs;
         }
 
-        return $dirs;
+        // crypt an: aus Index lesen (Klartextliste)
+        $idxFile = self::dbIndexFile();
+        $map     = self::readIndex($idxFile);
+
+        $out = [];
+        foreach ($map as $plain => $token) {
+            if (is_dir($d . $token)) {
+                $out[] = $plain;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -418,40 +697,50 @@ class GBDB {
      */
     public static function listTables(string $database, bool $descending = false): array {
         $database = Format::cleanString($database);
+        if ($database === "") return [];
 
-        if (Vars::crypt_data()) {
-            $database = Crypt::encode($database);
+        // crypt aus: normaler dir scan
+        if (!Vars::crypt_data()) {
+            $databasePath = Vars::DB_PATH() . $database . "/";
+            if (!is_dir($databasePath)) return [];
+
+            $tables = [];
+            $order  = $descending ? 1 : 0;
+            $tmp    = scandir($databasePath, $order);
+
+            foreach ($tmp as $entry) {
+                if ($entry === "." || $entry === "..") continue;
+                if (!str_ends_with($entry, Vars::data_extension())) continue;
+
+                $tables[] = str_replace(Vars::data_extension(), "", $entry);
+            }
+
+            return $tables;
         }
 
-        $databasePath = Vars::DB_PATH() . $database . "/";
+        // crypt an: token-dir + table-index lesen
+        $dbToken = self::getDbToken($database, false);
+        if ($dbToken === null) return [];
 
-        if (!is_dir($databasePath)) {
-            return [];
-        }
+        $databasePath = Vars::DB_PATH() . $dbToken . "/";
+        if (!is_dir($databasePath)) return [];
+
+        $idxFile = self::tableIndexFileByDbToken($dbToken);
+        $map     = self::readIndex($idxFile);
 
         $tables = [];
-        $order  = $descending ? 1 : 0;
-
-        $tmp = scandir($databasePath, $order);
-
-        foreach ($tmp as $entry) {
-            if ($entry === "." || $entry === "..") {
-                continue;
+        foreach ($map as $plain => $token) {
+            $file = $databasePath . $token . Vars::data_extension();
+            if (is_file($file)) {
+                $tables[] = $plain;
             }
+        }
 
-            if (!str_ends_with($entry, Vars::data_extension())) {
-                continue;
-            }
-
-            $table_name = str_replace(Vars::data_extension(), "", $entry);
-
-            if (Vars::crypt_data()) {
-                $table_name = Crypt::decode($table_name);
-            }
-
-            if ($table_name !== null && $table_name !== "") {
-                $tables[] = $table_name;
-            }
+        // Sortierung nach Klartext
+        if ($descending) {
+            rsort($tables, SORT_NATURAL | SORT_FLAG_CASE);
+        } else {
+            sort($tables, SORT_NATURAL | SORT_FLAG_CASE);
         }
 
         return $tables;
@@ -461,50 +750,26 @@ class GBDB {
      * Prüft ob value1 / value2 in einem Datensatz existieren (AND/OR)
      */
     public static function inDB2(string $database, string $table, mixed $value1, string $operator, mixed $value2): bool {
-        $file        = self::makePath($database, $table);
-        $jsonContent = @file_get_contents($file);
+        $file = self::makePath($database, $table);
+        $db   = self::ini($file);
 
-        if ($jsonContent === false) {
-            return false;
-        }
-
-        $db = json_decode($jsonContent, true);
-
-        if (Vars::crypt_data()) {
-            $decoded = Crypt::decode($jsonContent);
-
-            if ($decoded === null) {
-                return false;
-            }
-
-            $db = json_decode($decoded, true);
-        }
-
-        if (!is_array($db)) {
+        if (!is_array($db) || empty($db)) {
             return false;
         }
 
         foreach ($db as $r) {
+            if (!is_array($r)) continue;
+
             $foundValue1 = false;
             $foundValue2 = false;
 
             foreach ($r as $value) {
-                if ($value == $value1) {
-                    $foundValue1 = true;
-                }
-
-                if ($value == $value2) {
-                    $foundValue2 = true;
-                }
+                if ($value == $value1) $foundValue1 = true;
+                if ($value == $value2) $foundValue2 = true;
             }
 
-            if ($operator === 'AND' && $foundValue1 && $foundValue2) {
-                return true;
-            }
-
-            if ($operator === 'OR' && ($foundValue1 || $foundValue2)) {
-                return true;
-            }
+            if ($operator === 'AND' && $foundValue1 && $foundValue2) return true;
+            if ($operator === 'OR' && ($foundValue1 || $foundValue2)) return true;
         }
 
         return false;
@@ -514,8 +779,8 @@ class GBDB {
      * Löscht eine Datenbank inklusive aller Tabellen darin
      */
     public static function deleteAll(string $database): bool {
-        $ok      = true;
-        $tables  = self::listTables($database);
+        $ok     = true;
+        $tables = self::listTables($database);
 
         foreach ($tables as $tbl) {
             if (!self::deleteTable($database, $tbl)) {
@@ -523,6 +788,9 @@ class GBDB {
                 break;
             }
         }
+
+        // Table-Index entfernen, sonst ist DB-Ordner "nicht leer"
+        self::removeTableIndexIfExists($database);
 
         if (!self::deleteDatabase($database)) {
             $ok = false;
@@ -552,10 +820,6 @@ class GBDB {
             return [];
         }
 
-        // Header holen
-        $headerRow = $db[0]; // ["id" => -1, "name" => "-header-", ...]
-
-        // Keys extrahieren
-        return array_keys($headerRow);
+        return array_keys($db[0]);
     }
 }

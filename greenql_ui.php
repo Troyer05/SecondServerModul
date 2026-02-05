@@ -1,5 +1,7 @@
 <?php include 'assets/php/inc/.config/_config.inc.php'; ?>
 
+<?php if (!Vars::__DEV__()) { echo "Seite gesperrt!"; exit; } ?>
+
 <html>
 
 <head>
@@ -19,9 +21,7 @@
     $root = "assets/DB/GBDB/";
 
     // Datenbanken finden
-    $databases = array_filter(scandir($root), function($item) use ($root) {
-        return is_dir($root . $item) && !in_array($item, ['.', '..']);
-    });
+    $databases = GBDB::listDBs();
 
     foreach ($databases as $database):
     ?>
@@ -36,10 +36,7 @@
 
             <div class="subnav">
                 <?php
-                $tableFiles = array_filter(
-                    scandir($root . $database),
-                    fn($item) => is_file($root . $database . "/" . $item) && pathinfo($item, PATHINFO_EXTENSION) === 'json'
-                );
+                $tableFiles = GBDB::listTables($database);
 
                 foreach ($tableFiles as $tableFile):
                     $tableName = pathinfo($tableFile, PATHINFO_FILENAME);
