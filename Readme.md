@@ -292,4 +292,7 @@ print_r($data);
 * PHP 8.1+
 * Schreibrechte im DB-Ordner
 * Keine weiteren Libraries notwendig
+<<<<<<< HEAD
 
+=======
+>>>>>>> 870007f891b1f9941d7b9ae4ac57479074b60d4c
