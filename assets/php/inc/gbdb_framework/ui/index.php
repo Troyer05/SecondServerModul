@@ -15,7 +15,7 @@ if (isset($_GET["add"])) {
   }
 }
 
-$dbs = scandir("assets/DB/GBDB/");
+$dbs = GBDB::listDBs();
 ?>
 
 <div class="main">

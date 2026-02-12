@@ -60,12 +60,22 @@ class Vars {
 
     public static function srvp_ssl()
     {
-        return false;
+        return false; // Wird Server 2 mit HTTPS aufgerufen? (http://192.168.x.x | https://server2.deinewebapp.abc)
     }
 
     public static function srvp_static_key()
     {
-        return "_dev";
+        return "abc"; // Statischer Erstauthentifizierungsschlüssel für das Second Server Modul. Beachten: Auf Server 2 sollte exakt derselbe key verwendet werden.
+    }
+
+    public static function srvp_api_log()
+    {
+        return false; // Sollen API Aufrufe von Server 2 geloggt werden? (Logs können schnell sehr groß werden, jedoch werden in diesen Logs alle möglichen Infos über den Aufrufer abgelegt.)
+    }
+
+    public static function srvp_log_path()
+    {
+        return "assets/php/srv_logs/";
     }
 
     public static function enable_https_redirect()
@@ -74,14 +84,12 @@ class Vars {
         return true;
     }
 
-    // Alle Variablen für JSON Behandlung(en):
+    // Alle Variablen für GBDB:
     public static function json_path()
     {
-        // Wenn Sie einen bestimmten Ordner verwenden um JSON Dateien ab zu legen,
-        // dann können Sie den Path zu diesem Ordner hier einfügen:
+        // Wo soll das GBDB System die Daten ablegen?
         // WARNUNG: BITTE AN DAS ABSCHLIEßENDE / DENKEN
         return "assets/DB/";
-        // Beispiel: assets/DB/
     }
 
     // Sollen alle JSON Daten in Dateien formatiert werden?
@@ -133,16 +141,6 @@ class Vars {
         return ""; // SQL Dev User-Passwort
     }
 
-    public static function company_name()
-    {
-        return ""; // Ihr 'Firmen' Name
-    }
-
-    public static function company_email()
-    {
-        return ""; // Ihre 'Firmen' E-Mail Adresse
-    }
-
     public static function reCaptcha_website_key()
     {
         return "";
@@ -153,29 +151,14 @@ class Vars {
         return "";
     }
 
-    public static function greenQL_UI_password()
-    {
-        return ""; // Ein Passwort für die greenQL UI festlegen
-        // Ist es ein leerer String, so ist die Passwort Funktion deaktiviert.
-        // ist __DEV__ true, ist die Passwort Funktion deaktiviert.
-
-        // Nachtrag: Bitte nicht ändern, das Problem ist noch nicht behoben!!
-    }
-
     public static function crypt_data()
     {
-        return self::__DEV__()
-            ? false
-            : false; // Auf true setzen, wenn Daten verschlüsselt abgelegt werden sollen
-        // Ändern ist nach Datenverkehr nicht mehr empfohlen. Bevor GBDB verwendet wird, sollte diese Einstellung vorgenommen werden.
-        // Wenn diese Einstellung aktiviert ist, funktioniert nur das Erstellen und Löschen von Datenbanken und Tabellen über die GreenQL UI. Der Rest der UI ist dann unbrauchbar
+        return true; // Verschlüsselung der Datenablage von GBDB. Sollte immer auf true bleiben. Wenn nach Nutzung von GBDB encrypted werden muss, erst variable umstellen, dann /cryption.php aufrufen
     }
 
     public static function cryptKey()
     {
-        return self::__DEV__()
-            ? "abc"
-            : "abc"; // Schlüssel zum ver- und entschlüsseln der Daten
+        return "abc"; // Schlüssel zum ver- und entschlüsseln der Daten
     }
 
     public static function data_extension()

@@ -31,7 +31,7 @@ class SrvP {
 
     private static function getToken(): string {
         $resp = self::request([
-            "sauth" => Vars::srvp_static_key(),
+            "sauth" => hash('sha256', Vars::srvp_static_key()),
             "do"    => "gtoken"
         ]);
 
@@ -43,14 +43,8 @@ class SrvP {
     }
 
     private static function payloadWithToken(array $body): array {
-        $body["sauth"] = Vars::srvp_static_key();
-
-        if (Vars::srvp_static_key() !== "_dev") {
-            $body["token"] = self::getToken();
-        } else {
-            // _dev bypass
-            $body["token"] = "_dev";
-        }
+        $body["sauth"] = hash('sha256', Vars::srvp_static_key());
+        $body["token"] = self::getToken();
 
         return $body;
     }

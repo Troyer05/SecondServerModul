@@ -11,8 +11,10 @@ if (!is_array($body)) {
 }
 
 if (isset($body["do"]) && $body["do"] === "gtoken") {
-    if ($body["sauth"] != "_dev" && $body["sauth"] == STATIC_AUTH) {
-        $tokens = GBDB::getData("main", "t");
+    $token = [];
+
+    if ($body["sauth"] == hash('sha256', Vars::srvp_static_key())) {
+        $tokens = read_tokens();
 
         do {
             $retry = false;
@@ -25,9 +27,7 @@ if (isset($body["do"]) && $body["do"] === "gtoken") {
             }
         } while ($retry);
 
-        GBDB::insertData("main", "t", ["token" => Crypt::encode($token)]);
-    } else {
-        $token = "_dev";
+        add_token($token);
     }
 
     resp(200, $token);
@@ -37,14 +37,6 @@ general_auth($body, $method);
 test_param(["do"], $body);
 
 $do = $body["do"];
-
-if ($body["sauth"] !== "_dev") {
-    test_param(["token"], $body);
-
-    if (!test_token($body["token"])) {
-        resp(401, "SAuth Token invalid.");
-    }
-}
 
 if ($do == "get") {
     $ts = ["db", "table"];
