@@ -95,6 +95,19 @@ if ($do == "edit") {
     resp(400, "Edit failed.");
 }
 
+
+if ($do == "query") {
+    test_param(["query"], $body);
+
+    $ctx = [];
+
+    if (isset($body["ctx"]) && is_array($body["ctx"])) {
+        $ctx = $body["ctx"];
+    }
+
+    resp(200, DB_QUERY($body["query"], $ctx));
+}
+
 if ($do == "srv_enqueue") {
     test_param(["service", "action"], $body);
 

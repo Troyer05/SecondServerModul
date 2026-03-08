@@ -79,6 +79,14 @@ function DB_DELETE($db, $table, $where, $is) {
     return GBDB::deleteData($db, $table, $where, $is);
 }
 
+function DB_QUERY($query, array $ctx = []) {
+    if (DB_ARCH === "SQL") {
+        resp(400, "Query mode is only available for GBDB.");
+    }
+
+    return GBDB::query($query, $ctx);
+}
+
 function _token_file_path(): string {
     $rel = "assets/DB/framework_temp/_srvtkns.cry";
 

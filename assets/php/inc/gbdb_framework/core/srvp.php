@@ -105,6 +105,17 @@ class SrvP {
         return self::request(self::payloadWithToken($body));
     }
 
+
+    public static function query(string $script, array $ctx = []): array {
+        $body = [
+            "do" => "query",
+            "query" => $script,
+            "ctx" => $ctx
+        ];
+
+        return self::request(self::payloadWithToken($body));
+    }
+
     // ---------------------------------------------------
     // SRV JOB SYSTEM
     // ---------------------------------------------------

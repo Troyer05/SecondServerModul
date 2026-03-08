@@ -1,11 +1,6 @@
 <?php
 
 class GBDB {
-
-    /* ============================================================
-       NAME-OBFUSCATION (deterministisch) + Index-Mapping
-       ============================================================ */
-
     private static function nameToken(string $plain, string $ns = 'g'): string {
         $plain = (string)$plain;
         $key   = (string)Vars::cryptKey();
@@ -390,11 +385,6 @@ class GBDB {
         return $row;
     }
 
-    /**
-     * Append: schreibt 1 Operation als Zeile.
-     * - crypt=false: JSON + "\n"
-     * - crypt=true: Crypt::encode(JSON) + "\n"
-     */
     private static function appendOp(string $appendFile, array $op): bool {
         $dir = dirname($appendFile);
         if (!is_dir($dir)) {
@@ -410,10 +400,6 @@ class GBDB {
         return (@file_put_contents($appendFile, $line, FILE_APPEND | LOCK_EX) !== false);
     }
 
-    /**
-     * Liest Append-Log Zeilen.
-     * @return array<int, array> ops
-     */
     private static function readAppendOps(string $appendFile): array {
         if (!is_file($appendFile)) return [];
 
@@ -453,9 +439,6 @@ class GBDB {
         return $ops;
     }
 
-    /**
-     * Spielt Append-Ops auf ein Base-Array (mit Header) ab.
-     */
     private static function applyOps(array $base, array $ops): array {
         if (empty($base)) return $base;
 
@@ -513,11 +496,6 @@ class GBDB {
 
         return $base;
     }
-
-
-    /* ============================================================
-       PUBLIC API
-       ============================================================ */
 
     public static function createDatabase(string $name): bool {
         $name = Format::cleanString($name);
@@ -643,10 +621,6 @@ class GBDB {
         });
     }
 
-    /**
-     * INSERT = append-only
-     * @return int neue ID oder -1
-     */
     public static function insertData(string $database, string $table, mixed $data): int {
         if (!is_array($data)) return -1;
 
@@ -697,6 +671,7 @@ class GBDB {
 
     public static function deleteData(string $database, string $table, mixed $where, mixed $is): bool {
         $file = self::makePath($database, $table);
+
         if (!file_exists($file)) return false;
 
         $lockFile   = self::lockFileForTable($database, $table);
@@ -773,12 +748,14 @@ class GBDB {
             $hasHeader = (isset($header) && is_array($header) && self::isHeaderRow($header));
 
             $set = [];
+
             foreach ($newData as $k => $v) {
                 if ($k === "id") continue;
                 if ($hasHeader && array_key_exists($k, $header)) {
                     $set[$k] = $v;
                 }
             }
+
             if (empty($set)) return false;
 
             $ids = [];
@@ -948,10 +925,7 @@ class GBDB {
 
         return $tables;
     }
-
-    /**
-     * Compaction: Base-Snapshot neu bauen und Append leeren.
-     */
+    
     public static function compactTable(string $database, string $table): bool {
         $file = self::makePath($database, $table);
         if (!file_exists($file)) return false;
@@ -1050,6 +1024,11 @@ class GBDB {
 
         return array_keys($db[0]);
     }
+
+    public static function query(string $script, array $ctx = []): array {
+        return GreenQL::run($script, $ctx);
+    }
 }
+
 
 // Notiz von mir (Markus Müller, entwickler des ganzen mülls): "Alles, hauptsache kein SQL"

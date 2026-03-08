@@ -5,4 +5,6 @@ include 'functions.php';
 
 define("DB_ARCH", "GBDB"); // Or SQL
 
+define("DEV_INC", "assets/php/inc/gbdb_framework/dev");
+
 ?>
