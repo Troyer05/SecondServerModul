@@ -106,14 +106,29 @@ class SrvP {
     }
 
 
-    public static function query(string $script, array $ctx = []): array {
+    public static function query(string $script, array $ctx = [], array $params = []): array {
         $body = [
             "do" => "query",
             "query" => $script,
-            "ctx" => $ctx
+            "ctx" => $ctx,
+            "params" => $params
         ];
 
         return self::request(self::payloadWithToken($body));
+    }
+
+    public static function runScript(string $path, array $params = [], array $ctx = []): array {
+        if (!file_exists($path)) {
+            throw new Exception("Script not found: " . $path);
+        }
+
+        $script = file_get_contents($path);
+
+        if ($script === false) {
+            throw new Exception("Script could not be read: " . $path);
+        }
+
+        return self::query($script, $ctx, $params);
     }
 
     // ---------------------------------------------------

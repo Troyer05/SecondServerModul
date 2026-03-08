@@ -100,12 +100,17 @@ if ($do == "query") {
     test_param(["query"], $body);
 
     $ctx = [];
+    $params = [];
 
     if (isset($body["ctx"]) && is_array($body["ctx"])) {
         $ctx = $body["ctx"];
     }
 
-    resp(200, DB_QUERY($body["query"], $ctx));
+    if (isset($body["params"]) && is_array($body["params"])) {
+        $params = $body["params"];
+    }
+
+    resp(200, DB_QUERY($body["query"], $ctx, $params));
 }
 
 if ($do == "srv_enqueue") {

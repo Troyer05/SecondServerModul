@@ -79,12 +79,12 @@ function DB_DELETE($db, $table, $where, $is) {
     return GBDB::deleteData($db, $table, $where, $is);
 }
 
-function DB_QUERY($query, array $ctx = []) {
+function DB_QUERY($query, array $ctx = [], array $params = []) {
     if (DB_ARCH === "SQL") {
         resp(400, "Query mode is only available for GBDB.");
     }
 
-    return GBDB::query($query, $ctx);
+    return GBDB::query($query, $ctx, $params);
 }
 
 function _token_file_path(): string {

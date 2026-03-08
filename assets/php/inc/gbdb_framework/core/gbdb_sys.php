@@ -1025,8 +1025,50 @@ class GBDB {
         return array_keys($db[0]);
     }
 
-    public static function query(string $script, array $ctx = []): array {
-        return GreenQL::run($script, $ctx);
+    public static function query(string $script, array $ctx = [], array $params = []): array {
+        return GreenQL::run($script, $ctx, $params);
+    }
+
+    public static function runScript(string $path, array $params = [], array $ctx = []): array {
+        if (!file_exists($path)) {
+            return [
+                "ok" => false,
+                "messages" => [
+                    ["ok" => false, "text" => "Script nicht gefunden: " . $path]
+                ],
+                "results" => [],
+                "keys" => [],
+                "rows" => [],
+                "ctx" => [
+                    "db" => GreenQL::cleanName((string)($ctx["db"] ?? '')),
+                    "table" => GreenQL::cleanName((string)($ctx["table"] ?? ''))
+                ],
+                "vars" => [],
+                "refresh" => false
+            ];
+        }
+
+        $script = file_get_contents($path);
+
+        if ($script === false) {
+            return [
+                "ok" => false,
+                "messages" => [
+                    ["ok" => false, "text" => "Script konnte nicht gelesen werden: " . $path]
+                ],
+                "results" => [],
+                "keys" => [],
+                "rows" => [],
+                "ctx" => [
+                    "db" => GreenQL::cleanName((string)($ctx["db"] ?? '')),
+                    "table" => GreenQL::cleanName((string)($ctx["table"] ?? ''))
+                ],
+                "vars" => [],
+                "refresh" => false
+            ];
+        }
+
+        return self::query($script, $ctx, $params);
     }
 }
 

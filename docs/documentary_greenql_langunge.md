@@ -1,179 +1,81 @@
-# Documentary GreenQL Language
+# Documentary: GreenQL Language
 
-## Überblick
+## Idee
 
-GreenQL ist die eigene Query-Sprache des GBDB Frameworks. Sie ist dafür gebaut, GBDB-Basen, Tabellen und Datensätze ohne klassisches SQL zu steuern.
+GreenQL ist die eigene Query- und Scriptsprache des GBDB Frameworks.
 
-GreenQL kann verwendet werden über:
+Sie ist bewusst nicht als SQL-Klon gedacht. Die Sprache soll lesbar bleiben, aber direkt auf den GBDB-Core arbeiten.
 
-- `GBDB::query(...)`
-- `SrvP::query(...)`
-- `greenql_ui.php` im Query Mode
+## Kommandos im Überblick
 
----
+### Kontext
 
-## Grundidee
+#### `ROOT`
 
-GreenQL arbeitet command-basiert. Ein Script kann aus einem oder mehreren Befehlen bestehen.
-Befehle werden mit `;` getrennt.
-
-Beispiel:
-
-```php
-GBDB::query("ROOT main; SHOW TABLES;");
-```
-
----
-
-## Unterstützte Commands
-
-### `ROOT <base>`
-
-Setzt die aktive Base im Kontext.
-
-```txt
+```gql
 ROOT main;
 ```
 
----
+Setzt die aktive Base.
 
-### `BRANCH <table>`
+#### `BRANCH`
 
-Setzt die aktive Tabelle im Kontext.
-
-```txt
+```gql
 BRANCH users;
 ```
 
----
+Setzt die aktive Tabelle.
 
-### `SHOW BASES`
+### Anzeigen
 
-Listet alle vorhandenen Basen.
+#### `SHOW BASES`
 
-```txt
+```gql
 SHOW BASES;
 ```
 
-Rückgabe-Spalten:
+Listet alle Basen.
 
-- `base`
-- `tables`
-- `rows`
+#### `SHOW TABLES`
 
----
-
-### `SHOW TABLES`
-
-Listet alle Tabellen der aktiven oder explizit angegebenen Base.
-
-```txt
+```gql
 SHOW TABLES;
 SHOW TABLES IN main;
 ```
 
-Rückgabe-Spalten:
+Listet Tabellen der aktiven oder angegebenen Base.
 
-- `table`
-- `fields`
-- `rows`
+#### `DESCRIBE`
 
----
-
-### `GROW BASE <base>`
-
-Erstellt eine neue Base.
-
-```txt
-GROW BASE main;
-```
-
----
-
-### `DROP BASE <base>`
-
-Löscht eine Base, wenn sie leer ist.
-
-```txt
-DROP BASE logs;
-```
-
----
-
-### `GROW TABLE <table> (<fields>) [IN <base>]`
-
-Erstellt eine Tabelle.
-
-```txt
-GROW TABLE users (name, email, role) IN main;
-```
-
-Hinweise:
-
-- `id` wird intern automatisch geführt.
-- Feldnamen werden bereinigt.
-
----
-
-### `DROP TABLE <table> [IN <base>]`
-
-Löscht eine Tabelle.
-
-```txt
-DROP TABLE users IN main;
-```
-
----
-
-### `DESCRIBE <table> [IN <base>]`
-
-Zeigt die Struktur der Tabelle.
-
-```txt
+```gql
+DESCRIBE users;
 DESCRIBE users IN main;
 ```
 
-Rückgabe-Spalten:
+Zeigt die Struktur einer Tabelle.
 
-- `field`
-- `kind`
+#### `PEEK`
 
----
-
-### `PACK <table> [IN <base>]`
-
-Verdichtet die Tabelle und schreibt den aktuellen Zustand als frische Basisdatei.
-
-```txt
-PACK users IN main;
-```
-
----
-
-### `PEEK <table> [IN <base>] [LIMIT <n>]`
-
-Schnelle Vorschau einer Tabelle.
-
-```txt
+```gql
 PEEK users;
 PEEK users IN main LIMIT 20;
 ```
 
-Standardlimit: `50`
+Schnelle Vorschau einer Tabelle.
 
----
+#### `PICK`
 
-### `PICK <fields> FROM <table> [IN <base>] [WHERE ...] [SORT <field> ASC|DESC] [LIMIT <n>]`
-
-Liest Datensätze aus einer Tabelle.
-
-```txt
-PICK * FROM users IN main;
-PICK id, name, role FROM users IN main;
-PICK id, name FROM users WHERE role = 'admin' SORT id DESC LIMIT 20;
+```gql
+PICK * FROM users;
+PICK uid, name FROM users IN main;
+PICK * FROM users IN main WHERE role = 'admin';
+PICK * FROM users IN main WHERE name ~= 'mar';
+PICK * FROM users IN main SORT id DESC LIMIT 25;
 ```
 
-#### Unterstützte Vergleichsoperatoren im `WHERE`
+`PICK` ist die flexible Abfrage.
+
+Unterstützte Operatoren in `WHERE`:
 
 - `=`
 - `==`
@@ -184,225 +86,193 @@ PICK id, name FROM users WHERE role = 'admin' SORT id DESC LIMIT 20;
 - `<=`
 - `~=`
 
-`~=` bedeutet Teilstring-Suche, case-insensitive.
+### Struktur
 
-Beispiel:
+#### `GROW BASE`
 
-```txt
-PICK * FROM users WHERE name ~= 'mar';
-```
-
----
-
-### `SEED <table> WITH <assignments> [IN <base>]`
-
-Fügt einen neuen Datensatz ein.
-
-```txt
-SEED users WITH name='Markus', email='markus@example.com', role='admin' IN main;
-```
-
-#### Assignment-Syntax
-
-```txt
-feld='wert', anderes_feld=123, aktiv=true
-```
-
-Unterstützt:
-
-- Strings in `'...'` oder `"..."`
-- Zahlen
-- `true`
-- `false`
-- `null`
-
----
-
-### `RESHAPE <table> WITH <assignments> WHERE <condition> [IN <base>]`
-
-Aktualisiert Datensätze.
-
-```txt
-RESHAPE users WITH role='editor' WHERE id = 1 IN main;
-```
-
-Aktuell gelten für Schreibzugriffe folgende Einschränkungen:
-
-- `WHERE` muss gültig sein
-- unterstützt für Schreibzugriffe aktuell nur `=` bzw. `==`
-
----
-
-### `ERASE FROM <table> WHERE <condition> [IN <base>]`
-
-Löscht Datensätze.
-
-```txt
-ERASE FROM users WHERE id = 1 IN main;
-```
-
-Auch hier gilt aktuell bei Schreibzugriffen:
-
-- nur `=` bzw. `==`
-
----
-
-## Kontextnutzung
-
-Wenn du `ROOT` und `BRANCH` setzt, kannst du viele Commands kürzer formulieren.
-
-```txt
-ROOT main;
-BRANCH users;
-PICK * FROM users;
-SEED users WITH name='Lea', role='editor';
-```
-
-Der Kontext wird nach jedem Command aktualisiert und in der Rückgabe unter `ctx` mitgegeben.
-
----
-
-## Mehrere Commands in einem Script
-
-```txt
+```gql
 GROW BASE main;
-ROOT main;
-GROW TABLE users (name, email, role);
-SEED users WITH name='Markus', email='markus@example.com', role='admin';
-PICK * FROM users;
 ```
 
-Bei Fehlern stoppt die Ausführung an der ersten fehlerhaften Stelle.
+Erstellt eine Base.
 
----
+#### `DROP BASE`
 
-## Rückgabeformat
-
-Beispiel:
-
-```php
-$result = GBDB::query("PICK id, name FROM users IN main LIMIT 10;");
+```gql
+DROP BASE main;
 ```
 
-Wichtige Felder im Rückgabe-Array:
+Löscht eine Base, wenn sie leer ist.
 
-- `ok` -> Gesamtstatus
-- `messages` -> Meldungen pro Command
-- `results` -> alle Result-Sets
-- `keys` -> Feldliste des letzten Result-Sets
-- `rows` -> Datensätze des letzten Result-Sets
-- `ctx` -> aktueller Kontext
-- `refresh` -> zeigt Struktur-/Datenänderungen an
+#### `GROW TABLE`
 
----
-
-## Beispiele
-
-### Beispiel 1: Struktur aufbauen
-
-```txt
-GROW BASE main;
-ROOT main;
-GROW TABLE users (name, email, role);
+```gql
+GROW TABLE users (uid, name, email) IN main;
 ```
 
-### Beispiel 2: Testdaten einfügen
+Erstellt eine Tabelle.
 
-```txt
-SEED users WITH name='Markus', email='markus@example.com', role='admin' IN main;
-SEED users WITH name='Lea', email='lea@example.com', role='editor' IN main;
+#### `DROP TABLE`
+
+```gql
+DROP TABLE users IN main;
 ```
 
-### Beispiel 3: Lesen
+Löscht eine Tabelle.
 
-```txt
-PICK * FROM users IN main;
-PICK id, name FROM users IN main WHERE role = 'admin';
-PICK id, name FROM users IN main SORT id DESC LIMIT 20;
-```
+#### `PACK`
 
-### Beispiel 4: Bearbeiten
-
-```txt
-RESHAPE users WITH role='owner' WHERE id = 1 IN main;
-```
-
-### Beispiel 5: Löschen
-
-```txt
-ERASE FROM users WHERE id = 2 IN main;
-```
-
-### Beispiel 6: Schema prüfen
-
-```txt
-DESCRIBE users IN main;
-```
-
-### Beispiel 7: Tabellenzustand verdichten
-
-```txt
+```gql
 PACK users IN main;
 ```
 
----
+Kompaktiert eine Tabelle.
 
-## Typische Fehlerquellen
+### Daten
 
-### Keine Base aktiv
+#### `SEED`
 
-Bei Commands wie `SHOW TABLES`, `GROW TABLE`, `PICK`, `SEED`, `RESHAPE`, `ERASE` ohne `IN <base>` muss entweder eine Base im Kontext stehen oder die Base explizit angegeben werden.
+```gql
+SEED users WITH uid='u_1001', name='Markus', email='markus@example.com' IN main;
+```
 
-### Falsche Feldnamen
+Legt einen Datensatz an.
 
-Feldnamen werden bereinigt. Sonderzeichen außerhalb des erlaubten Namensschemas werden entfernt.
+#### `RESHAPE`
 
-### Leere Assignments
+```gql
+RESHAPE users WITH role='editor' WHERE id = 1 IN main;
+```
 
-Bei `SEED` und `RESHAPE` müssen echte Werte übergeben werden.
+Ändert Datensätze.
 
-### Ungültiges WHERE
+Aktuell für Schreibzugriffe nur mit `WHERE feld = wert` oder `==`.
 
-`PICK` ist flexibler.
-`RESHAPE` und `ERASE` sind derzeit absichtlich restriktiver.
+#### `ERASE`
 
----
+```gql
+ERASE FROM users WHERE id = 1 IN main;
+```
 
-## GreenQL lokal und remote
+Löscht Datensätze.
 
-### Lokal
+Aktuell für Schreibzugriffe nur mit `WHERE feld = wert` oder `==`.
+
+## Kommentare
+
+```gql
+# Kommentarzeile
+SEED users WITH name="Markus" IN main; # Inline-Kommentar
+```
+
+Zusätzlich werden auch `//`-Inline-Kommentare außerhalb von Strings ignoriert.
+
+## Variablen
+
+### Syntax
+
+```gql
+declare _name = "Markus";
+declare _uid = param("uid");
+```
+
+Der aus deinem Beispiel bekannte Schreibfehler wird auch toleriert:
+
+```gql
+decalre _name = "Markus";
+```
+
+### Parameternutzung
+
+```gql
+declare _name = param("name");
+declare _email = param("email");
+```
+
+Die Parameter werden beim Aufruf übergeben:
+
+```php
+GBDB::runScript("scripts/greenql/makeUser.gql", [
+    "name" => $name,
+    "email" => $email
+]);
+```
+
+### Wo Variablen eingesetzt werden können
+
+```gql
+declare _base = "main";
+declare _table = "users";
+declare _state = "Aktiv";
+
+ROOT _base;
+GROW TABLE _table (uid, name, status) IN _base;
+SEED _table WITH status=_state IN _base;
+```
+
+Variablen funktionieren aktuell in:
+
+- Base-Namen
+- Tabellennamen
+- Spaltenlisten, wenn das Token als Variablenname vorliegt
+- `WITH`-Werten
+- `WHERE`-Werten
+- `SORT`-Feldern
+
+## Beispielscript
+
+```gql
+# Parameter empfangen
+declare _name = param("name");
+declare _username = param("username");
+declare _email = param("email");
+declare _password = param("password");
+declare _uid = param("uid");
+
+declare _state = "Aktiv";
+
+SEED users WITH uid=_uid, name=_name, username=_username, email=_email, password=_password IN main;
+GROW TABLE _uid (firma, status) IN main;
+GROW BASE _state;
+
+declare _state = "Inaktiv";
+GROW BASE _state;
+```
+
+## Ausführungsmöglichkeiten
+
+### In PHP direkt
 
 ```php
 GBDB::query("PICK * FROM users IN main;");
+```
+
+### Aus Datei
+
+```php
+GBDB::runScript("scripts/greenql/makeUser.gql", ["uid" => "u_1001"]);
 ```
 
 ### Remote
 
 ```php
 SrvP::query("PICK * FROM users IN main;");
+SrvP::runScript("scripts/greenql/makeUser.gql", ["uid" => "u_1001"]);
 ```
 
-Dadurch kannst du dieselbe Sprache in Dev-UI, Framework-Code und SecondServer nutzen.
+### In der UI
 
----
+- Query im Query Mode einfügen
+- oder `.gql` Datei im Query Mode hochladen und ausführen
 
-## Kurzreferenz
+## Rückgabewerte
 
-```txt
-ROOT main;
-BRANCH users;
-SHOW BASES;
-SHOW TABLES IN main;
-GROW BASE main;
-DROP BASE logs;
-GROW TABLE users (name, email, role) IN main;
-DROP TABLE users IN main;
-DESCRIBE users IN main;
-PACK users IN main;
-PEEK users IN main LIMIT 20;
-PICK * FROM users IN main;
-PICK id, name FROM users WHERE role = 'admin' SORT id DESC LIMIT 10;
-SEED users WITH name='Markus', email='markus@example.com' IN main;
-RESHAPE users WITH role='owner' WHERE id = 1 IN main;
-ERASE FROM users WHERE id = 1 IN main;
-```
+Jede Query bzw. jedes Script liefert:
+
+- Status `ok`
+- Meldungen `messages`
+- Resultsets `results`
+- letztes Tabellenresultat in `keys` und `rows`
+- Kontext `ctx`
+- Variablenzustand `vars`
+- `refresh`, wenn sich Struktur oder Daten verändert haben

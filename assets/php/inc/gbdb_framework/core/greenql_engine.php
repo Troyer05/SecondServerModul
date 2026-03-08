@@ -29,12 +29,151 @@ class GreenQL {
         return $value;
     }
 
-    public static function parseList(string $raw): array {
+    public static function stripComments(string $script): string {
+        $lines = preg_split('/\r\n|\r|\n/', $script);
+        $out = [];
+
+        foreach ($lines as $line) {
+            $clean = '';
+            $quote = '';
+            $len = strlen((string)$line);
+
+            for ($i = 0; $i < $len; $i++) {
+                $ch = $line[$i];
+                $next = $i + 1 < $len ? $line[$i + 1] : '';
+
+                if ($quote !== '') {
+                    if ($ch === '\\' && $i + 1 < $len) {
+                        $clean .= $ch . $line[$i + 1];
+                        $i++;
+                        continue;
+                    }
+
+                    if ($ch === $quote) {
+                        $quote = '';
+                    }
+
+                    $clean .= $ch;
+                    continue;
+                }
+
+                if ($ch === '"' || $ch === "'") {
+                    $quote = $ch;
+                    $clean .= $ch;
+                    continue;
+                }
+
+                if ($ch === '#') {
+                    break;
+                }
+
+                if ($ch === '/' && $next === '/') {
+                    break;
+                }
+
+                $clean .= $ch;
+            }
+
+            $out[] = rtrim($clean);
+        }
+
+        return trim(implode("\n", $out));
+    }
+
+    public static function splitCommands(string $script): array {
+        $script = self::stripComments($script);
+        $commands = [];
+        $buffer = '';
+        $quote = '';
+        $len = strlen($script);
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $script[$i];
+
+            if ($quote !== '') {
+                if ($ch === '\\' && $i + 1 < $len) {
+                    $buffer .= $ch . $script[$i + 1];
+                    $i++;
+                    continue;
+                }
+
+                if ($ch === $quote) {
+                    $quote = '';
+                }
+
+                $buffer .= $ch;
+                continue;
+            }
+
+            if ($ch === '"' || $ch === "'") {
+                $quote = $ch;
+                $buffer .= $ch;
+                continue;
+            }
+
+            if ($ch === ';') {
+                $command = trim($buffer);
+
+                if ($command !== '') {
+                    $commands[] = $command;
+                }
+
+                $buffer = '';
+                continue;
+            }
+
+            $buffer .= $ch;
+        }
+
+        $buffer = trim($buffer);
+
+        if ($buffer !== '') {
+            $commands[] = $buffer;
+        }
+
+        return $commands;
+    }
+
+    public static function evaluateValue(string $value, array $vars = [], array $params = []): mixed {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/^param\(("(?:\\.|[^"])*"|\'(?:\\.|[^\'])*\')\)$/i', $value, $m)) {
+            $key = (string)self::unquote((string)$m[1]);
+            return $params[$key] ?? null;
+        }
+
+        if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $value) && array_key_exists($value, $vars)) {
+            return $vars[$value];
+        }
+
+        return self::unquote($value);
+    }
+
+    public static function resolveNameToken(string $token, array $vars = []): string {
+        $token = trim($token);
+
+        if ($token === '') {
+            return '';
+        }
+
+        if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $token) && array_key_exists($token, $vars)) {
+            return self::cleanName((string)$vars[$token]);
+        }
+
+        return self::cleanName($token);
+    }
+
+    public static function parseList(string $raw, array $vars = []): array {
         $parts = preg_split('/\s*,\s*/', trim($raw));
         $out = [];
 
         foreach ($parts as $part) {
-            $part = self::cleanName((string)$part);
+            $part = self::resolveNameToken((string)$part, $vars);
+
             if ($part === '') continue;
             $out[] = $part;
         }
@@ -42,25 +181,25 @@ class GreenQL {
         return array_values(array_filter($out));
     }
 
-    public static function parseAssignments(string $raw): array {
+    public static function parseAssignments(string $raw, array $vars = [], array $params = []): array {
         $raw = trim($raw);
 
         if ($raw === '') return [];
 
-        preg_match_all('/([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*("(?:\\\\.|[^"])*"|\'(?:\\\\.|[^\'])*\'|[^,]+)(?:,|$)/', $raw, $matches, PREG_SET_ORDER);
+        preg_match_all('/([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*("(?:\\.|[^"])*"|\'(?:\\.|[^\'])*\'|[^,]+)(?:,|$)/', $raw, $matches, PREG_SET_ORDER);
 
         $out = [];
 
         foreach ($matches as $match) {
             $key = self::cleanName((string)$match[1]);
             if ($key === '' || $key === 'id') continue;
-            $out[$key] = self::unquote(trim((string)$match[2]));
+            $out[$key] = self::evaluateValue(trim((string)$match[2]), $vars, $params);
         }
 
         return $out;
     }
 
-    public static function parseWhere(string $raw): ?array {
+    public static function parseWhere(string $raw, array $vars = [], array $params = []): ?array {
         $raw = trim($raw);
 
         if ($raw === '') return null;
@@ -72,7 +211,7 @@ class GreenQL {
         return [
             'field' => self::cleanName((string)$m[1]),
             'op' => (string)$m[2],
-            'value' => self::unquote((string)$m[3])
+            'value' => self::evaluateValue((string)$m[3], $vars, $params)
         ];
     }
 
@@ -191,7 +330,7 @@ class GreenQL {
         ];
     }
 
-    public static function command(string $command, array &$ctx = []): array {
+    public static function command(string $command, array &$ctx = [], array &$vars = [], array $params = []): array {
         $command = trim($command);
 
         if ($command === '') {
@@ -201,12 +340,20 @@ class GreenQL {
             ];
         }
 
-        if (str_ends_with($command, ';')) {
-            $command = rtrim(substr($command, 0, -1));
+        if (preg_match('/^(?:DECLARE|DECALRE)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/i', $command, $m)) {
+            $name = self::cleanName((string)$m[1]);
+            $vars[$name] = self::evaluateValue((string)$m[2], $vars, $params);
+
+            return [
+                'ok' => true,
+                'message' => 'Variable gesetzt: ' . $name,
+                'ctx' => $ctx,
+                'vars' => $vars
+            ];
         }
 
         if (preg_match('/^ROOT\s+([a-zA-Z0-9_\-]+)$/i', $command, $m)) {
-            $ctx['db'] = self::cleanName((string)$m[1]);
+            $ctx['db'] = self::resolveNameToken((string)$m[1], $vars);
             $ctx['table'] = '';
 
             return [
@@ -218,7 +365,7 @@ class GreenQL {
         }
 
         if (preg_match('/^BRANCH\s+([a-zA-Z0-9_\-]+)$/i', $command, $m)) {
-            $ctx['table'] = self::cleanName((string)$m[1]);
+            $ctx['table'] = self::resolveNameToken((string)$m[1], $vars);
 
             return [
                 'ok' => true,
@@ -250,7 +397,7 @@ class GreenQL {
         }
 
         if (preg_match('/^SHOW\s+TABLES(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
-            $db = self::cleanName((string)($m[1] ?? ($ctx['db'] ?? '')));
+            $db = self::resolveNameToken((string)($m[1] ?? ($ctx['db'] ?? '')), $vars);
 
             if ($db === '') {
                 return [
@@ -283,7 +430,7 @@ class GreenQL {
         }
 
         if (preg_match('/^GROW\s+BASE\s+([a-zA-Z0-9_\-]+)$/i', $command, $m)) {
-            $db = self::cleanName((string)$m[1]);
+            $db = self::resolveNameToken((string)$m[1], $vars);
 
             if ($db === '') {
                 return [
@@ -315,7 +462,7 @@ class GreenQL {
         }
 
         if (preg_match('/^DROP\s+BASE\s+([a-zA-Z0-9_\-]+)$/i', $command, $m)) {
-            $db = self::cleanName((string)$m[1]);
+            $db = self::resolveNameToken((string)$m[1], $vars);
             $ok = GBDB::deleteDatabase($db);
 
             if (!$ok) {
@@ -340,9 +487,9 @@ class GreenQL {
         }
 
         if (preg_match('/^GROW\s+TABLE\s+([a-zA-Z0-9_\-]+)\s*\(([^\)]+)\)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
-            $table = self::cleanName((string)$m[1]);
-            $cols = self::parseList((string)$m[2]);
-            $db = self::cleanName((string)($m[3] ?? ($ctx['db'] ?? '')));
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $cols = self::parseList((string)$m[2], $vars);
+            $db = self::resolveNameToken((string)($m[3] ?? ($ctx['db'] ?? '')), $vars);
 
             if ($db === '') {
                 return [
@@ -382,8 +529,8 @@ class GreenQL {
         }
 
         if (preg_match('/^DROP\s+TABLE\s+([a-zA-Z0-9_\-]+)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
-            $table = self::cleanName((string)$m[1]);
-            $db = self::cleanName((string)($m[2] ?? ($ctx['db'] ?? '')));
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $db = self::resolveNameToken((string)($m[2] ?? ($ctx['db'] ?? '')), $vars);
 
             if ($db === '' || $table === '') {
                 return [
@@ -417,8 +564,8 @@ class GreenQL {
         }
 
         if (preg_match('/^DESCRIBE\s+([a-zA-Z0-9_\-]+)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
-            $table = self::cleanName((string)$m[1]);
-            $db = self::cleanName((string)($m[2] ?? ($ctx['db'] ?? '')));
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $db = self::resolveNameToken((string)($m[2] ?? ($ctx['db'] ?? '')), $vars);
 
             if ($db === '' || $table === '') {
                 return [
@@ -452,8 +599,8 @@ class GreenQL {
         }
 
         if (preg_match('/^PACK\s+([a-zA-Z0-9_\-]+)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
-            $table = self::cleanName((string)$m[1]);
-            $db = self::cleanName((string)($m[2] ?? ($ctx['db'] ?? '')));
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $db = self::resolveNameToken((string)($m[2] ?? ($ctx['db'] ?? '')), $vars);
 
             if ($db === '' || $table === '') {
                 return [
@@ -485,8 +632,8 @@ class GreenQL {
         }
 
         if (preg_match('/^PEEK\s+([a-zA-Z0-9_\-]+)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?(?:\s+LIMIT\s+(\d+))?$/i', $command, $m)) {
-            $table = self::cleanName((string)$m[1]);
-            $db = self::cleanName((string)($m[2] ?? ($ctx['db'] ?? '')));
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $db = self::resolveNameToken((string)($m[2] ?? ($ctx['db'] ?? '')), $vars);
             $limit = isset($m[3]) ? (int)$m[3] : 50;
 
             if ($db === '' || $table === '') {
@@ -513,13 +660,13 @@ class GreenQL {
 
         if (preg_match('/^PICK\s+(.+?)\s+FROM\s+([a-zA-Z0-9_\-]+)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?(?:\s+WHERE\s+(.+?))?(?:\s+SORT\s+([a-zA-Z0-9_\-]+)\s+(ASC|DESC))?(?:\s+LIMIT\s+(\d+))?$/i', $command, $m)) {
             $colsRaw = trim((string)$m[1]);
-            $table = self::cleanName((string)$m[2]);
-            $db = self::cleanName((string)($m[3] ?? ($ctx['db'] ?? '')));
-            $where = isset($m[4]) ? self::parseWhere((string)$m[4]) : null;
-            $sortField = isset($m[5]) ? self::cleanName((string)$m[5]) : null;
+            $table = self::resolveNameToken((string)$m[2], $vars);
+            $db = self::resolveNameToken((string)($m[3] ?? ($ctx['db'] ?? '')), $vars);
+            $where = isset($m[4]) ? self::parseWhere((string)$m[4], $vars, $params) : null;
+            $sortField = isset($m[5]) ? self::resolveNameToken((string)$m[5], $vars) : null;
             $sortDir = strtoupper((string)($m[6] ?? 'ASC'));
             $limit = isset($m[7]) ? (int)$m[7] : 50;
-            $columns = $colsRaw === '*' ? ['*'] : self::parseList($colsRaw);
+            $columns = $colsRaw === '*' ? ['*'] : self::parseList($colsRaw, $vars);
 
             if ($db === '' || $table === '') {
                 return [
@@ -544,9 +691,9 @@ class GreenQL {
         }
 
         if (preg_match('/^SEED\s+([a-zA-Z0-9_\-]+)\s+WITH\s+(.+?)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
-            $table = self::cleanName((string)$m[1]);
-            $assignments = self::parseAssignments((string)$m[2]);
-            $db = self::cleanName((string)($m[3] ?? ($ctx['db'] ?? '')));
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $assignments = self::parseAssignments((string)$m[2], $vars, $params);
+            $db = self::resolveNameToken((string)($m[3] ?? ($ctx['db'] ?? '')), $vars);
 
             if ($db === '' || $table === '') {
                 return [
@@ -587,10 +734,10 @@ class GreenQL {
         }
 
         if (preg_match('/^RESHAPE\s+([a-zA-Z0-9_\-]+)\s+WITH\s+(.+?)\s+WHERE\s+(.+?)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
-            $table = self::cleanName((string)$m[1]);
-            $assignments = self::parseAssignments((string)$m[2]);
-            $where = self::parseWhere((string)$m[3]);
-            $db = self::cleanName((string)($m[4] ?? ($ctx['db'] ?? '')));
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $assignments = self::parseAssignments((string)$m[2], $vars, $params);
+            $where = self::parseWhere((string)$m[3], $vars, $params);
+            $db = self::resolveNameToken((string)($m[4] ?? ($ctx['db'] ?? '')), $vars);
 
             if ($db === '' || $table === '') {
                 return [
@@ -638,9 +785,9 @@ class GreenQL {
         }
 
         if (preg_match('/^ERASE\s+FROM\s+([a-zA-Z0-9_\-]+)\s+WHERE\s+(.+?)(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
-            $table = self::cleanName((string)$m[1]);
-            $where = self::parseWhere((string)$m[2]);
-            $db = self::cleanName((string)($m[3] ?? ($ctx['db'] ?? '')));
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $where = self::parseWhere((string)$m[2], $vars, $params);
+            $db = self::resolveNameToken((string)($m[3] ?? ($ctx['db'] ?? '')), $vars);
 
             if ($db === '' || $table === '') {
                 return [
@@ -694,20 +841,21 @@ class GreenQL {
         ];
     }
 
-    public static function run(string $script, array $ctx = []): array {
-        $commands = preg_split('/;+\s*/', trim($script));
+    public static function run(string $script, array $ctx = [], array $params = []): array {
+        $commands = self::splitCommands(trim($script));
         $messages = [];
         $results = [];
         $lastKeys = [];
         $lastRows = [];
         $refresh = false;
         $okAll = true;
+        $vars = [];
 
         foreach ($commands as $command) {
             $command = trim((string)$command);
             if ($command === '') continue;
 
-            $result = self::command($command, $ctx);
+            $result = self::command($command, $ctx, $vars, $params);
 
             if (($result['message'] ?? '') !== '') {
                 $messages[] = [
@@ -746,6 +894,7 @@ class GreenQL {
                 'db' => self::cleanName((string)($ctx['db'] ?? '')),
                 'table' => self::cleanName((string)($ctx['table'] ?? ''))
             ],
+            'vars' => $vars,
             'refresh' => $refresh
         ];
     }

@@ -515,6 +515,48 @@ if (isset($_POST['greenql_action'])) {
         ]);
     }
 
+    if ($action === 'upload_gql') {
+        if (!isset($_FILES['gql_file']) || !is_array($_FILES['gql_file'])) {
+            gql_json(['ok' => false, 'messages' => [['ok' => false, 'text' => 'Keine .gql Datei hochgeladen.']]]);
+        }
+
+        $file = $_FILES['gql_file'];
+        $name = (string)($file['name'] ?? '');
+        $tmp = (string)($file['tmp_name'] ?? '');
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+        if ($ext !== 'gql') {
+            gql_json(['ok' => false, 'messages' => [['ok' => false, 'text' => 'Es sind nur .gql Dateien erlaubt.']]]);
+        }
+
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            gql_json(['ok' => false, 'messages' => [['ok' => false, 'text' => 'Upload konnte nicht gelesen werden.']]]);
+        }
+
+        $script = file_get_contents($tmp);
+
+        if ($script === false) {
+            gql_json(['ok' => false, 'messages' => [['ok' => false, 'text' => 'Datei konnte nicht gelesen werden.']]]);
+        }
+
+        $result = GBDB::query($script, $ctx);
+        $ctx = $result['ctx'] ?? $ctx;
+        $snap = gql_snapshot($ctx['db'] ?? '', $ctx['table'] ?? '');
+        $messages = $result['messages'] ?? [];
+        
+        array_unshift($messages, ['ok' => true, 'text' => '.gql Script ausgeführt: ' . $name]);
+
+        gql_json([
+            'ok' => (bool)($result['ok'] ?? false),
+            'messages' => $messages,
+            'result_html' => gql_render_table_html($result['keys'] ?? [], $result['rows'] ?? []),
+            'snapshot' => $snap,
+            'ctx' => $ctx,
+            'uploaded_script' => $script,
+            'refresh' => (bool)($result['refresh'] ?? false)
+        ]);
+    }
+
     if ($action === 'save_db') {
         $db = gql_clean_name((string)($_POST['db_name'] ?? ''));
 

@@ -11,6 +11,8 @@
     const previewBox = document.getElementById('previewBox');
     const managerBox = document.getElementById('managerBox');
     const runExamples = document.getElementById('runExamples');
+    const uploadForm = document.getElementById('gqlUploadForm');
+    const gqlFileInput = document.getElementById('gqlFileInput');
     const statTables = document.getElementById('statTables');
     const statRows = document.getElementById('statRows');
     const activeModeLabel = document.getElementById('activeModeLabel');
@@ -100,6 +102,42 @@
         }
 
         syncUrl();
+    };
+
+
+    const uploadScript = async () => {
+        applyMode('query');
+
+        const file = gqlFileInput?.files?.[0];
+
+        if (!file) {
+            renderMessages([{ ok: false, text: 'Bitte zuerst eine .gql Datei wählen.' }]);
+            return;
+        }
+
+        if (!file.name.toLowerCase().endsWith('.gql')) {
+            renderMessages([{ ok: false, text: 'Es sind nur .gql Dateien erlaubt.' }]);
+            return;
+        }
+
+        try {
+            const data = await post({
+                greenql_action: 'upload_gql',
+                gql_file: file,
+                current_db: state.currentDb,
+                current_table: state.currentTable
+            });
+
+            renderMessages(data.messages || []);
+            resultBox.innerHTML = data.result_html || '<div class="empty-state">Kein Tabellenergebnis.</div>';
+            if (typeof data.uploaded_script === 'string' && editor) {
+                editor.value = data.uploaded_script;
+            }
+            applySnapshot(data.snapshot, data.ctx);
+            if (uploadForm) uploadForm.reset();
+        } catch (e) {
+            renderMessages([{ ok: false, text: 'Script-Upload konnte nicht ausgeführt werden.' }]);
+        }
     };
 
     const runQuery = async () => {
@@ -278,6 +316,11 @@
             editor.value = chip.dataset.query || '';
             editor.focus();
         });
+    });
+
+    uploadForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await uploadScript();
     });
 
     runExamples?.addEventListener('click', () => {

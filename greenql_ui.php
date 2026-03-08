@@ -168,11 +168,23 @@ include DEV_INC . "/greenql.php";
                             <button class="secondary-btn" id="clearQueryBtn">Leeren</button>
                         </div>
 
+                        <form id="gqlUploadForm" class="upload-box" enctype="multipart/form-data">
+                            <label class="field-block compact">
+                                <span>.gql Script hochladen</span>
+                                <input type="file" name="gql_file" id="gqlFileInput" accept=".gql">
+                            </label>
+                            <div class="action-row tight">
+                                <button type="submit" class="secondary-btn">Upload + Ausführen</button>
+                            </div>
+                        </form>
+
                         <div class="hint-box">
                             <div class="hint-title">Syntax-Idee</div>
                             <code>ROOT demo;</code>
                             <code>GROW TABLE users (name, email, role);</code>
                             <code>PICK name, email FROM users WHERE role ~= 'admin' SORT name ASC LIMIT 10;</code>
+                            <code>declare _status = "aktiv";</code>
+                            <code># Kommentare starten mit #</code>
                         </div>
                     </div>
 

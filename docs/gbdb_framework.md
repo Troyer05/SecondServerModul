@@ -2,20 +2,23 @@
 
 ## Überblick
 
-GBDB ist ein dateibasiertes Datenbanksystem innerhalb des Frameworks. Es arbeitet nicht mit klassischem SQL-Backend, sondern verwaltet Daten in strukturierten Dateien unter dem durch `Vars::DB_PATH()` definierten Pfad.
+GBDB ist die direkte PHP-Schicht des Frameworks. Sie arbeitet append-basiert auf Dateiebene und bildet die technische Grundlage für GreenQL und das SecondServer Module.
 
-Das System ist so gebaut, dass du als Entwickler zwei gleichwertige Wege hast:
+Die Kernidee ist:
 
-- direkte PHP-Methoden auf `GBDB`
-- GreenQL als eigene Query-Sprache
+- Basen = Datenbank-Ordner
+- Tabellen = Dateistrukturen innerhalb einer Base
+- Einträge = Datensätze mit Auto-ID
+- GreenQL = alternative Sprachschicht auf denselben Methoden
 
-Beides greift auf dieselben Tabellen und Datensätze zu.
+## Typischer Include
 
----
+```php
+<?php
+include 'assets/php/inc/.config/_config.inc.php';
+```
 
-## Hauptklasse: `GBDB`
-
-Die Klasse `GBDB` ist die zentrale Datenbank-API.
+## Wichtige Direktmethoden
 
 ### Basen
 
@@ -23,298 +26,138 @@ Die Klasse `GBDB` ist die zentrale Datenbank-API.
 GBDB::createDatabase("main");
 GBDB::deleteDatabase("main");
 GBDB::listDBs();
-GBDB::deleteAll("main");
 ```
 
 ### Tabellen
 
 ```php
-GBDB::createTable("main", "users", ["name", "email", "role"]);
+GBDB::createTable("main", "users", ["uid", "name", "email"]);
 GBDB::deleteTable("main", "users");
 GBDB::listTables("main");
 GBDB::getKeys("main", "users");
 GBDB::compactTable("main", "users");
-GBDB::nextID("main", "users");
 ```
 
 ### Datensätze
 
 ```php
-GBDB::insertData("main", "users", ["name" => "Markus"]);
+GBDB::insertData("main", "users", [
+    "uid" => "u_1001",
+    "name" => "Markus",
+    "email" => "markus@example.com"
+]);
+
 GBDB::getData("main", "users");
-GBDB::getData("main", "users", true, "id", 1);
-GBDB::editData("main", "users", "id", 1, ["role" => "admin"]);
-GBDB::deleteData("main", "users", "id", 1);
-GBDB::elementExists("main", "users", "email", "markus@example.com");
+GBDB::getData("main", "users", true, "uid", "u_1001");
+
+GBDB::editData("main", "users", "uid", "u_1001", [
+    "name" => "Markus Müller"
+]);
+
+GBDB::deleteData("main", "users", "uid", "u_1001");
 ```
 
-### GreenQL
+## GreenQL aus dem Core heraus
+
+Neben den Direktmethoden gibt es zwei High-Level-Zugänge:
 
 ```php
 GBDB::query("PICK * FROM users IN main;");
+GBDB::runScript("scripts/greenql/makeUser.gql", ["uid" => "u_1001"]);
 ```
 
----
+### `GBDB::query()`
 
-## Datenmodell
-
-Eine GBDB-Base entspricht logisch einer Datenbank.
-Eine GBDB-Tabelle entspricht logisch einer Tabelle.
-Ein Datensatz ist ein assoziatives Array.
-
-Beispiel:
+Signatur:
 
 ```php
-[
-    "id" => 1,
-    "name" => "Markus",
-    "email" => "markus@example.com",
-    "role" => "admin"
-]
+GBDB::query(string $script, array $ctx = [], array $params = []): array
 ```
 
-Die Spalte `id` wird vom System als Auto-ID geführt.
+Parameter:
 
----
+- `script`: GreenQL-Text
+- `ctx`: Startkontext wie `db` und `table`
+- `params`: Script-Parameter für `param("...")`
 
-## Interne Arbeitsweise
+### `GBDB::runScript()`
 
-GBDB schreibt nicht jeden Zustand immer komplett neu weg. Das System arbeitet mit:
-
-- einer Basisdatei pro Tabelle
-- Meta-Datei
-- Append-Datei
-- optionalen Index-Mappings bei aktivierter Datenverschlüsselung
-
-### Das bringt folgende Vorteile
-
-- weniger komplette Rewrites
-- bessere Nachvollziehbarkeit von Änderungen
-- kompaktes Insert-/Update-/Delete-Modell
-- gezielte Verdichtung per `compactTable()` oder GreenQL `PACK`
-
----
-
-## Wichtige Methoden im Detail
-
-### `createDatabase(string $name): bool`
-
-Legt eine neue Base an.
+Signatur:
 
 ```php
-GBDB::createDatabase("main");
+GBDB::runScript(string $path, array $params = [], array $ctx = []): array
 ```
 
-Liefert `true`, wenn die Base erfolgreich erstellt wurde.
+Verhalten:
 
----
+- liest eine `.gql` Datei aus der Projektstruktur
+- führt sie mit derselben Engine wie `GBDB::query()` aus
+- akzeptiert Script-Parameter
+- gibt dieselbe Result-Struktur zurück wie `query()`
 
-### `deleteDatabase(string $name): bool`
+## Beispiel: User-Script kapseln
 
-Löscht eine Base nur dann, wenn sie leer ist. Wenn noch Tabellen enthalten sind, schlägt der Aufruf fehl.
-
-```php
-GBDB::deleteDatabase("main");
-```
-
-Wenn du alles löschen willst, nutze vorher `deleteAll("main")`.
-
----
-
-### `createTable(string $database, string $table, array $cols): bool`
-
-Legt eine Tabelle an. Die `id`-Spalte wird intern automatisch berücksichtigt.
+### PHP
 
 ```php
-GBDB::createTable("main", "users", ["name", "email", "role"]);
-```
-
----
-
-### `insertData(string $database, string $table, mixed $data): int`
-
-Fügt einen neuen Datensatz ein und liefert die neue ID zurück.
-
-```php
-$id = GBDB::insertData("main", "users", [
-    "name" => "Lea",
-    "email" => "lea@example.com",
-    "role" => "editor"
+GBDB::runScript("scripts/greenql/makeUser.gql", [
+    "uid" => $uid,
+    "name" => $name,
+    "username" => $username,
+    "email" => $email,
+    "password" => $password
 ]);
 ```
 
-Wenn der Insert fehlschlägt, kommt `-1` zurück.
+### `.gql`
 
----
+```gql
+# Parameter lesen
+declare _uid = param("uid");
+declare _name = param("name");
+declare _username = param("username");
+declare _email = param("email");
+declare _password = param("password");
 
-### `getData(...)`
-
-#### Alle Datensätze
-
-```php
-$rows = GBDB::getData("main", "users");
+SEED users WITH uid=_uid, name=_name, username=_username, email=_email, password=_password IN main;
 ```
 
-#### Einzelnen Datensatz per Filter
+## Was direkt und was über GreenQL?
 
-```php
-$user = GBDB::getData("main", "users", true, "id", 1);
+### Direktmethoden sind stark, wenn ...
+
+- du exakt in PHP bleiben willst
+- du IDE-Autocomplete magst
+- du sehr gezielt CRUD aufrufst
+
+### GreenQL ist stark, wenn ...
+
+- du mehrere Schritte zusammenfassen willst
+- du Abläufe in Scripts auslagern willst
+- du wiederverwendbare Seeder, Setups oder Admin-Makros bauen willst
+- du dieselbe Sprache lokal und remote verwenden willst
+
+## Empfohlene Struktur für GreenQL-Scripts
+
+```txt
+/scripts
+    /greenql
+        makeUser.gql
+        setupMain.gql
+        resetDemo.gql
+        seedMuseum.gql
 ```
 
-Wichtig: Im Filtermodus wird der **erste passende Datensatz** zurückgegeben.
+## Hinweise zur Datenstruktur
 
----
+- `id` wird intern als Auto-ID geführt
+- `id` sollte in `WITH` nicht manuell gesetzt werden
+- beim Tabellenumbau sollten nur fachliche Spalten angegeben werden, nicht `id`
+- `compactTable()` bzw. `PACK` sollte nach vielen Änderungen sinnvoll eingesetzt werden
 
-### `editData(...)`
+## Best Practice
 
-```php
-GBDB::editData("main", "users", "id", 1, [
-    "role" => "admin"
-]);
-```
-
-Alle Datensätze, die auf `where == is` passen, werden aktualisiert.
-
----
-
-### `deleteData(...)`
-
-```php
-GBDB::deleteData("main", "users", "id", 1);
-```
-
-Alle Datensätze, die auf `where == is` passen, werden gelöscht.
-
----
-
-### `compactTable(...)`
-
-Verdichtet die Tabelle. Vorherige Append-Einträge werden in eine neue Basistabelle eingerechnet.
-
-```php
-GBDB::compactTable("main", "users");
-```
-
-Das ist vor allem bei vielen Änderungen oder langen Laufzeiten sinnvoll.
-
----
-
-## GreenQL innerhalb von GBDB
-
-Mit `GBDB::query()` kannst du dieselbe Tabelle per Sprachsyntax ansprechen.
-
-```php
-GBDB::query("ROOT main;");
-GBDB::query("GROW TABLE users (name, email, role);");
-GBDB::query("SEED users WITH name='Markus', email='markus@example.com', role='admin';");
-GBDB::query("PICK * FROM users;");
-```
-
-Die Query-Engine arbeitet direkt auf der `GBDB`-API. Es gibt also keinen Umweg über eine zweite Schicht mit eigenem Speicherformat.
-
----
-
-## Rückgabewerte und Verhalten
-
-### Schreibmethoden
-
-- `createDatabase()` -> `bool`
-- `deleteDatabase()` -> `bool`
-- `createTable()` -> `bool`
-- `deleteTable()` -> `bool`
-- `insertData()` -> `int`
-- `editData()` -> `bool`
-- `deleteData()` -> `bool`
-- `compactTable()` -> `bool`
-
-### Lesemethoden
-
-- `getData()` -> Array mit Datensätzen oder einzelnes Array bei Filtermodus
-- `listDBs()` -> Array der Basen
-- `listTables()` -> Array der Tabellen
-- `getKeys()` -> Array der Feldnamen
-- `nextID()` -> `int`
-
-### Querymethode
-
-- `query()` -> strukturiertes Ergebnis-Array
-
----
-
-## Best Practices
-
-### 1. Strukturen klar halten
-
-Lege pro fachlichem Bereich eine eindeutige Base-Struktur an, z. B.:
-
-- `main`
-- `museumqr`
-- `tickets`
-- `logs`
-
-### 2. Tabellen sauber benennen
-
-Empfohlen:
-
-- `users`
-- `tickets`
-- `orders`
-- `modules`
-- `srv_jobs`
-
-### 3. Felder konsistent halten
-
-Gute Beispiele:
-
-- `created_at`
-- `updated_at`
-- `status`
-- `type`
-- `email`
-- `role`
-
-### 4. Nach vielen Operationen komprimieren
-
-Wenn viele Inserts, Updates und Deletes gelaufen sind:
-
-```php
-GBDB::compactTable("main", "users");
-```
-
-### 5. Für komplexere Dev-Workflows GreenQL verwenden
-
-Direkte Methoden sind ideal für Produktivlogik.
-GreenQL ist stark für Debugging, Migrations, Devtools, Admin-Oberflächen und lesbare, kompakte Bulk-Aktionen.
-
----
-
-## Typischer Flow
-
-```php
-GBDB::createDatabase("main");
-GBDB::createTable("main", "users", ["name", "email", "role"]);
-
-GBDB::insertData("main", "users", [
-    "name" => "Markus",
-    "email" => "markus@example.com",
-    "role" => "admin"
-]);
-
-$user = GBDB::getData("main", "users", true, "id", 1);
-GBDB::editData("main", "users", "id", 1, ["role" => "owner"]);
-$users = GBDB::getData("main", "users");
-```
-
----
-
-## Zusammenspiel mit der UI
-
-`greenql_ui.php` ist im Dev-Bereich die visuelle Arbeitsoberfläche für GBDB. Dort kannst du:
-
-- Basen anlegen/löschen
-- Tabellen anlegen/umbauen/löschen
-- Entries anlegen/bearbeiten/löschen
-- GreenQL direkt ausführen
-- Live-Preview und Schema prüfen
-
-Die UI ist kein separates System, sondern nur ein Frontend für dieselbe GBDB- und GreenQL-Logik.
+- Projekt-Setup als `.gql` Script ablegen
+- wiederkehrende Create-/Seed-Abläufe als `runScript()` kapseln
+- komplexe Massenaktionen lieber über GreenQL als über viele einzelne PHP-Aufrufe abbilden
+- fachlich stabile Prozesse in eigene Scriptdateien auslagern
