@@ -2,11 +2,21 @@
 
 class FileTool {
     /** Prüft, ob eine Datei existiert */
+    /**
+     * Verarbeitet die Funktion exists.
+     * @param string $path Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function exists(string $path): bool {
         return is_file($path);
     }
 
     /** Liest den Inhalt einer Datei (UTF-8, mit Locking) */
+    /**
+     * Verarbeitet die Funktion read.
+     * @param string $path Übergabewert.
+     * @return string Rückgabewert.
+     */
     public static function read(string $path): string {
         if (!is_file($path)) {
             return '';
@@ -45,6 +55,11 @@ class FileTool {
     }
 
     /** Liest JSON und gibt Array zurück */
+    /**
+     * Verarbeitet die Funktion read json.
+     * @param string $path Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function readJson(string $path): array {
         if (!is_file($path)) {
             return [];
@@ -62,6 +77,12 @@ class FileTool {
     }
 
     /** Sicheres JSON-Schreiben (atomic) */
+    /**
+     * Verarbeitet die Funktion write json.
+     * @param string $path Übergabewert.
+     * @param array $data Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function writeJson(string $path, array $data): bool {
         self::ensureDir(dirname($path));
 
@@ -79,11 +100,22 @@ class FileTool {
     }
 
     /** Löscht Datei */
+    /**
+     * Löscht Daten aus der angegebenen Quelle.
+     * @param string $path Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function delete(string $path): bool {
         return is_file($path) ? @unlink($path) : false;
     }
 
     /** Kopiert ein ganzes Verzeichnis rekursiv */
+    /**
+     * Verarbeitet die Funktion copy dir.
+     * @param string $src Übergabewert.
+     * @param string $dest Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function copyDir(string $src, string $dest): void {
         if (!is_dir($src)) {
             return;
@@ -110,6 +142,12 @@ class FileTool {
     }
 
     /** Löscht Dateien älter als X Tage */
+    /**
+     * Verarbeitet die Funktion delete old files.
+     * @param string $dir Übergabewert.
+     * @param int $days Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function deleteOldFiles(string $dir, int $days): void {
         if (!is_dir($dir)) {
             return;
@@ -125,6 +163,11 @@ class FileTool {
     }
 
     /** Berechnet Gesamtgröße eines Verzeichnisses in MB */
+    /**
+     * Verarbeitet die Funktion dir size.
+     * @param string $dir Übergabewert.
+     * @return float Rückgabewert.
+     */
     public static function dirSize(string $dir): float {
         if (!is_dir($dir)) {
             return 0.0;
@@ -142,6 +185,12 @@ class FileTool {
     }
 
     /** Listet Dateien nach Endung */
+    /**
+     * Verarbeitet die Funktion list files.
+     * @param string $dir Übergabewert.
+     * @param string $ext Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function listFiles(string $dir, string $ext = ''): array {
         if (!is_dir($dir)) {
             return [];
@@ -167,6 +216,12 @@ class FileTool {
     }
 
     /** Backup eines gesamten Verzeichnisses */
+    /**
+     * Verarbeitet die Funktion backup dir.
+     * @param string $src Übergabewert.
+     * @param string $dest Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function backupDir(string $src, string $dest): bool {
         if (!is_dir($src)) {
             return false;
@@ -178,6 +233,11 @@ class FileTool {
     }
 
     /** Verzeichnis sicher erstellen */
+    /**
+     * Verarbeitet die Funktion ensure dir.
+     * @param string $dir Übergabewert.
+     * @return void Rückgabewert.
+     */
     private static function ensureDir(string $dir): void {
         if (!is_dir($dir)) {
             if (!@mkdir($dir, 0777, true)) {
@@ -187,6 +247,11 @@ class FileTool {
     }
 
     /** Alle Unterordner auflisten */
+    /**
+     * Verarbeitet die Funktion list dirs.
+     * @param string $path Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function listDirs(string $path): array {
         if (!is_dir($path)) {
             return [];

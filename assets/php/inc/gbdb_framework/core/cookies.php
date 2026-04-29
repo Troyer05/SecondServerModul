@@ -51,6 +51,13 @@ class Cookie {
         $_COOKIE[$name] = $value;
     }
 
+    /**
+     * Speichert einen Wert in der angegebenen Quelle.
+     * @param string $name Übergabewert.
+     * @param string $value Übergabewert.
+     * @param int $expiration Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function set(string $name, string $value, int $expiration = self::DUR): void {
         self::send($name, $value, $expiration);
     }
@@ -71,16 +78,32 @@ class Cookie {
         $_COOKIE[$name] = $value;
     }
 
+    /**
+     * Verarbeitet die Funktion add.
+     * @param string $name Übergabewert.
+     * @param string $value Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function add(string $name, string $value): void {
         if (!self::exists($name)) {
             self::set($name, $value);
         }
     }
 
+    /**
+     * Liest Daten aus der angegebenen Quelle.
+     * @param string $name Übergabewert.
+     * @return mixed Rückgabewert.
+     */
     public static function get(string $name): mixed {
         return $_COOKIE[$name] ?? null;
     }
 
+    /**
+     * Löscht Daten aus der angegebenen Quelle.
+     * @param string $name Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function delete(string $name): void {
         $name = self::validateName($name);
 
@@ -93,10 +116,22 @@ class Cookie {
         unset($_COOKIE[$name]);
     }
 
+    /**
+     * Bearbeitet bestehende Daten.
+     * @param string $name Übergabewert.
+     * @param string $value Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function edit(string $name, string $value): void {
         self::set($name, $value);
     }
 
+    /**
+     * Verarbeitet die Funktion compare.
+     * @param string $name Übergabewert.
+     * @param string $value Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function compare(string $name, string $value): bool {
         return self::get($name) === $value;
     }
@@ -117,6 +152,10 @@ class Cookie {
         }
     }
 
+    /**
+     * Initialisiert die Klasse und legt benötigte Strukturen an.
+     * @return void Rückgabewert.
+     */
     public static function init(): void {
         foreach (Vars::init_cookies() as $r) {
             $name  = $r["cookie_name"] ?? "";
@@ -129,6 +168,11 @@ class Cookie {
         // self::refresh();
     }
 
+    /**
+     * Verarbeitet die Funktion exists.
+     * @param string $name Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function exists(string $name): bool {
         return isset($_COOKIE[self::validateName($name)]);
     }

@@ -1,272 +1,525 @@
 <?php
-// Hier sind alle globalen Variablen und Helper-Funktionen des Frameworks.
-// Bearbeitung der oberen Konfigurations-Bereiche ist vorgesehen.
-// Ab dem "Framework"-Block sollte nur mit Bedacht geändert werden.
 
 class Vars {
     /**
-     * Cache für die Dev-Erkennung, damit nicht bei jedem Aufruf auf die Platte zugegriffen wird.
-     * @var bool|null
+     * Umgebungsvariablen zur Konfiguration von GBDB-FrameWork
      */
+
     protected static ?bool $isDev = null;
 
+    private const APP = [
+        "version" => "1.0",
+    ];
+
+    private const MROOT = [
+        "url"          => "https://mamueller.de/mroot/api.php",
+        "license_form" => "lizenz.php",
+        "pid"          => "12345",
+        "auth"         => "AWE-mm_4",
+    ];
+
+    private const UPDATE = [
+        "auth" => "AWE-mm_4",
+    ];
+
+    private const SRVP = [
+        "ip"         => "127.0.0.1/REPOS/SecondServerModul",
+        "ssl"        => false,
+        "static_key" => "abc",
+        "api_log"    => false,
+        "log_path"   => "assets/php/srv_logs/",
+    ];
+
+    private const SHARESUTE = [
+        "api_url"  => "",
+        "api_key"  => "",
+        "api_auth" => "",
+        "sid" => ""
+    ];
+
+    private const MQR = [
+        "api_url" => "https://museumqr.de/api.php",
+        "api_key" => "DEIN_API_KEY",
+    ];
+
+    private const SECURITY = [
+        "https_redirect" => true,
+        "crypt_data"     => true,
+        "crypt_key"      => "abc",
+    ];
+
+    private const GBDB = [
+        "json_path" => "assets/DB/",
+    ];
+
+    private const SQL = [
+        "prod" => [
+            "server"   => "",
+            "database" => "",
+            "user"     => "",
+            "password" => "",
+        ],
+        "dev" => [
+            "server"   => "",
+            "database" => "",
+            "user"     => "",
+            "password" => "",
+        ],
+    ];
+
+    private const RECAPTCHA = [
+        "website_key" => "",
+        "secret_key"  => "",
+    ];
+
+    private const INIT_COOKIES = [
+        [
+            "cookie_name"  => "TestCookie",
+            "cookie_value" => "Test1",
+        ],
+        [
+            "cookie_name"  => "Cookie2",
+            "cookie_value" => "abc",
+        ],
+    ];
+
+    private const INIT_SESSION = [
+        [
+            "session_name"  => "pnp",
+            "session_value" => "",
+        ],
+        [
+            "session_name"  => "Test Session Variable 2",
+            "session_value" => "Test 2",
+        ],
+    ];
+
     /**
-     * Entwickler Modus für Entwicklung/Lokale Umgebung.
-     * Bei Produktiv Umgebung auf false setzen:
-     *
-     * Erkennung:
-     *  - ENV GBDB_ENV=dev oder GBDB_DEV=1
-     *  - bestimmte Dateien/Ordner auf Windows (dein bisheriger Mechanismus)
-     *
-     * @return bool
+     * Verarbeitet die Funktion a u t h.
+     * @return array Rückgabewert.
+     */
+    public static function AUTH(): array {
+        return [
+            "main_db" => "userdb",
+            "token_expires_days" => "3",
+            "jwt_cookie_name" => "jwt",
+            "logout_file" => "",
+            "login_file" => "",
+            "files_no_login" => ["login.php", "logout.php"],
+            "root_user" => [
+                "uid" => "abc123",
+                "username" => "admin",
+                "password" => Auth::hashPass("admin"),
+                "email" => "",
+                "active" => true,
+                "rolle" => "admin",
+                "datum" => "",
+                "tfa" => false
+            ],
+            "root_user_meta" => [
+                "uid" => "abc123",
+                "vorname" => "System",
+                "nachname" => "Administrator",
+                "telefon" => "",
+                "mobil" => "",
+                "adresse" => "",
+                "gender" => "",
+                "bio" => "",
+                "image" => ""
+            ],
+            "email_config" => [
+                "from_email" => "noreply@greenbucket.net",
+                "from_name" => "GBDB FrameWork",
+                "subject_verify" => "Bestätige deine E-Mail Adresse",
+                "subject_2fa" => "Dein 2FA Code lautet ...",
+                "mail_verify" => "assets/php/inc/gbdb_framework/mail_templates/verify_mail.html",
+                "mail_2fa" => "assets/php/inc/gbdb_framework/mail_templates/tfa_mail.html",
+                "verify_link" => "https://example-domain.at/verify_mail.php?token=" // Token wird später angehängt
+            ]
+        ];
+    }
+
+    // ======================================================
+    // # Hier beginnt die Auswertung der Umgebungsvariablen #
+    // ======================================================
+
+    /**
+     * Verarbeitet die Funktion __ d e v__.
+     * @return bool Rückgabewert.
      */
     public static function __DEV__(): bool {
         if (self::$isDev !== null) {
             return self::$isDev;
         }
 
-        // 1) Environment-Override (z.B. in Apache/Nginx/PHP-FPM gesetzt)
-        $env = getenv('GBDB_ENV');
+        $env = getenv("GBDB_ENV");
 
-        if ($env !== false && strtolower($env) === 'dev') {
+        if ($env !== false && strtolower($env) === "dev") {
             return self::$isDev = true;
         }
 
-        $envDevFlag = getenv('GBDB_DEV');
-        
+        $envDevFlag = getenv("GBDB_DEV");
+
         if ($envDevFlag !== false && (int)$envDevFlag === 1) {
             return self::$isDev = true;
         }
 
-        // 2) Deine bisherigen Marker (Windows Pfade / Dateien)
-        if (file_exists('D:\\')) {
-            if (file_exists('D:\\priv_laptop')) {
-                return self::$isDev = true;
-            }
-        }
-
-        if (file_exists('C:\\daa\\daa.txt')) {
+        if (file_exists("D:\\priv_laptop")) {
             return self::$isDev = true;
         }
 
-        // 3) Default: kein Dev
+        if (file_exists("C:\\daa\\daa.txt")) {
+            return self::$isDev = true;
+        }
+
+        if (file_exists("/privl.p")) {
+            return self::$isDev = true;
+        }
+
         return self::$isDev = false;
     }
 
-    public static function srvp_ip()
-    {
-        return "127.0.0.1/REPOS/SecondServerModul";
+    /**
+     * Verarbeitet die Funktion app_version.
+     * @return string Rückgabewert.
+     */
+    public static function app_version(): string {
+        return self::APP["version"];
     }
-
-    public static function srvp_ssl()
-    {
-        return false; // Wird Server 2 mit HTTPS aufgerufen? (http://192.168.x.x | https://server2.deinewebapp.abc)
-    }
-
-    public static function srvp_static_key()
-    {
-        return "abc"; // Statischer Erstauthentifizierungsschlüssel für das Second Server Modul. Beachten: Auf Server 2 sollte exakt derselbe key verwendet werden.
-    }
-
-    public static function srvp_api_log()
-    {
-        return false; // Sollen API Aufrufe von Server 2 geloggt werden? (Logs können schnell sehr groß werden, jedoch werden in diesen Logs alle möglichen Infos über den Aufrufer abgelegt.)
-    }
-
-    public static function srvp_log_path()
-    {
-        return "assets/php/srv_logs/";
-    }
-
-    public static function enable_https_redirect()
-    {
-        // Soll der PHP basierte HTTPS Redirect aktiviert werden?
-        return true;
-    }
-
-    // Alle Variablen für GBDB:
-    public static function json_path()
-    {
-        // Wo soll das GBDB System die Daten ablegen?
-        // WARNUNG: BITTE AN DAS ABSCHLIEßENDE / DENKEN
-        return "assets/DB/";
-    }
-
-    // Sollen alle JSON Daten in Dateien formatiert werden?
-    public static function json_pretty()
-    {
-        // DEV: schön formatiert, PROD: kompakt
-        return self::__DEV__() ? true : false; // true für Formatieren
-    }
-
-    // Alle SQL Variablen für Produktiv Umgebung:
-    public static function sql_server()
-    {
-        return ""; // SQL Server
-    }
-
-    public static function sql_database()
-    {
-        return ""; // SQL Datenbank
-    }
-
-    public static function sql_user()
-    {
-        return ""; // SQL User
-    }
-
-    public static function sql_password()
-    {
-        return ""; // SQL User-Passwort
-    }
-
-    // Alle SQL Variablen für Entwicklungs/Lokale Umgebung:
-    public static function sql_dev_server()
-    {
-        return ""; // SQL Dev Server
-    }
-
-    public static function sql_dev_database()
-    {
-        return ""; // SQL Dev Datenbank
-    }
-
-    public static function sql_dev_user()
-    {
-        return ""; // SQL Dev User
-    }
-
-    public static function sql_dev_password()
-    {
-        return ""; // SQL Dev User-Passwort
-    }
-
-    public static function reCaptcha_website_key()
-    {
-        return "";
-    }
-
-    public static function reCaptcha_secret_key()
-    {
-        return "";
-    }
-
-    public static function crypt_data()
-    {
-        return true; // Verschlüsselung der Datenablage von GBDB. Sollte immer auf true bleiben. Wenn nach Nutzung von GBDB encrypted werden muss, erst variable umstellen, dann /cryption.php aufrufen
-    }
-
-    public static function cryptKey()
-    {
-        return "abc"; // Schlüssel zum ver- und entschlüsseln der Daten
-    }
-
-    public static function data_extension()
-    {
-        return self::crypt_data()
-            ? ".db"   // ... wenn Daten Verschlüsselung aktiviert ist
-            : ".json"; // Dateiendung der Datendateien
-    }
-
-    // Hier können Sie Cookies hinzufügen, die initial gesetzt werden sollen
-    // WICHTIG: Es dürfen NUR Zahlen und Buchstaben verwendet werden für Cookies.
-    // Nicht einmal Leerzeichen sind zulässig.
-    public static function init_cookies()
-    {
-        return array(
-            [
-                "cookie_name"  => "TestCookie", // Cookie Name
-                "cookie_value" => "Test1"       // Cookie Value
-            ],
-            [
-                "cookie_name"  => "Cookie2",
-                "cookie_value" => "abc"
-            ], // ...
-        );
-    }
-
-    // Hier können Sie Session Variablen hinzufügen, die initial gesetzt werden sollen
-    public static function init_session()
-    {
-        return array(
-            [
-                "session_name"  => "pnp", // Session Variable Name
-                "session_value" => ""     // Session variable Value
-            ],
-            [
-                "session_name"  => "Test Session Variable 2",
-                "session_value" => "Test 2"
-            ], // ...
-        );
-    }
-
-    // ======================================================================
-    // AB HIER BEGINNT DAS FRAMEWORK! Bearbeitung auf eigene Gefahr!
-    // Sobald Sie den Code des Frameworks bearbeiten, verfällt
-    // unser Support für das greenbucket Framework.
-    // ======================================================================
 
     /**
-     * Sicheres Lesen von $_SERVER-Variablen mit Default.
-     *
-     * @param string $key
-     * @param mixed  $default
-     * @return mixed
+     * Verarbeitet die Funktion m root_url.
+     * @return string Rückgabewert.
      */
-    protected static function serverVar(string $key, $default = '')
-    {
+    public static function mRoot_url(): string {
+        return self::MROOT["url"];
+    }
+
+    /**
+     * Verarbeitet die Funktion m root_license_form.
+     * @return string Rückgabewert.
+     */
+    public static function mRoot_license_form(): string {
+        return self::MROOT["license_form"];
+    }
+
+    /**
+     * Verarbeitet die Funktion m root_pid.
+     * @return string Rückgabewert.
+     */
+    public static function mRoot_pid(): string {
+        return self::MROOT["pid"];
+    }
+
+    /**
+     * Verarbeitet die Funktion m root_auth.
+     * @return string Rückgabewert.
+     */
+    public static function mRoot_auth(): string {
+        return self::MROOT["auth"];
+    }
+
+    /**
+     * Verarbeitet die Funktion update_auth.
+     * @return string Rückgabewert.
+     */
+    public static function update_auth(): string {
+        return self::UPDATE["auth"];
+    }
+
+    /**
+     * Verarbeitet die Funktion srvp_ip.
+     * @return string Rückgabewert.
+     */
+    public static function srvp_ip(): string {
+        return self::SRVP["ip"];
+    }
+
+    /**
+     * Verarbeitet die Funktion srvp_ssl.
+     * @return bool Rückgabewert.
+     */
+    public static function srvp_ssl(): bool {
+        return self::SRVP["ssl"];
+    }
+
+    /**
+     * Verarbeitet die Funktion srvp_static_key.
+     * @return string Rückgabewert.
+     */
+    public static function srvp_static_key(): string {
+        return self::SRVP["static_key"];
+    }
+
+    /**
+     * Verarbeitet die Funktion srvp_api_log.
+     * @return bool Rückgabewert.
+     */
+    public static function srvp_api_log(): bool {
+        return self::SRVP["api_log"];
+    }
+
+    /**
+     * Verarbeitet die Funktion srvp_log_path.
+     * @return string Rückgabewert.
+     */
+    public static function srvp_log_path(): string {
+        return self::SRVP["log_path"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sharesuite_api_url.
+     * @return string Rückgabewert.
+     */
+    public static function sharesuite_api_url(): string {
+        return self::SHARESUTE["api_url"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sharesuite_api_key.
+     * @return string Rückgabewert.
+     */
+    public static function sharesuite_api_key(): string {
+        return self::SHARESUTE["api_key"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sharesuite_api_auth.
+     * @return string Rückgabewert.
+     */
+    public static function sharesuite_api_auth(): string {
+        return self::SHARESUTE["api_auth"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sharesuite_sid.
+     * @return string Rückgabewert.
+     */
+    public static function sharesuite_sid(): string {
+        return self::SHARESUTE["sid"];
+    }
+
+    /**
+     * Verarbeitet die Funktion mqr_api_url.
+     * @return string Rückgabewert.
+     */
+    public static function mqr_api_url(): string {
+        return self::MQR["api_url"];
+    }
+
+    /**
+     * Verarbeitet die Funktion mqr_api_key.
+     * @return string Rückgabewert.
+     */
+    public static function mqr_api_key(): string {
+        return self::MQR["api_key"];
+    }
+
+    /**
+     * Verarbeitet die Funktion enable_https_redirect.
+     * @return bool Rückgabewert.
+     */
+    public static function enable_https_redirect(): bool {
+        return self::SECURITY["https_redirect"];
+    }
+
+    /**
+     * Verarbeitet die Funktion json_path.
+     * @return string Rückgabewert.
+     */
+    public static function json_path(): string {
+        return self::GBDB["json_path"];
+    }
+
+    /**
+     * Verarbeitet die Funktion json_pretty.
+     * @return bool Rückgabewert.
+     */
+    public static function json_pretty(): bool {
+        return self::__DEV__();
+    }
+
+    /**
+     * Verarbeitet die Funktion sql_server.
+     * @return string Rückgabewert.
+     */
+    public static function sql_server(): string {
+        return self::SQL["prod"]["server"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sql_database.
+     * @return string Rückgabewert.
+     */
+    public static function sql_database(): string {
+        return self::SQL["prod"]["database"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sql_user.
+     * @return string Rückgabewert.
+     */
+    public static function sql_user(): string {
+        return self::SQL["prod"]["user"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sql_password.
+     * @return string Rückgabewert.
+     */
+    public static function sql_password(): string {
+        return self::SQL["prod"]["password"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sql_dev_server.
+     * @return string Rückgabewert.
+     */
+    public static function sql_dev_server(): string {
+        return self::SQL["dev"]["server"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sql_dev_database.
+     * @return string Rückgabewert.
+     */
+    public static function sql_dev_database(): string {
+        return self::SQL["dev"]["database"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sql_dev_user.
+     * @return string Rückgabewert.
+     */
+    public static function sql_dev_user(): string {
+        return self::SQL["dev"]["user"];
+    }
+
+    /**
+     * Verarbeitet die Funktion sql_dev_password.
+     * @return string Rückgabewert.
+     */
+    public static function sql_dev_password(): string {
+        return self::SQL["dev"]["password"];
+    }
+
+    /**
+     * Verarbeitet die Funktion re captcha_website_key.
+     * @return string Rückgabewert.
+     */
+    public static function reCaptcha_website_key(): string {
+        return self::RECAPTCHA["website_key"];
+    }
+
+    /**
+     * Verarbeitet die Funktion re captcha_secret_key.
+     * @return string Rückgabewert.
+     */
+    public static function reCaptcha_secret_key(): string {
+        return self::RECAPTCHA["secret_key"];
+    }
+
+    /**
+     * Verarbeitet die Funktion crypt_data.
+     * @return bool Rückgabewert.
+     */
+    public static function crypt_data(): bool {
+        return self::SECURITY["crypt_data"];
+    }
+
+    /**
+     * Verarbeitet die Funktion crypt key.
+     * @return string Rückgabewert.
+     */
+    public static function cryptKey(): string {
+        return self::SECURITY["crypt_key"];
+    }
+
+    /**
+     * Verarbeitet die Funktion data_extension.
+     * @return string Rückgabewert.
+     */
+    public static function data_extension(): string {
+        return self::crypt_data() ? ".db" : ".json";
+    }
+
+    /**
+     * Verarbeitet die Funktion init_cookies.
+     * @return array Rückgabewert.
+     */
+    public static function init_cookies(): array {
+        return self::INIT_COOKIES;
+    }
+
+    /**
+     * Verarbeitet die Funktion init_session.
+     * @return array Rückgabewert.
+     */
+    public static function init_session(): array {
+        return self::INIT_SESSION;
+    }
+
+    /**
+     * Verarbeitet die Funktion server var.
+     * @param string $key Übergabewert.
+     * @param mixed $default Übergabewert.
+     * @return mixed Rückgabewert.
+     */
+    protected static function serverVar(string $key, $default = "") {
         return $_SERVER[$key] ?? $default;
     }
 
-    public static function this_file()
-    {
-        return basename(self::serverVar('SCRIPT_FILENAME', 'index.php'));
+    /**
+     * Verarbeitet die Funktion this_file.
+     * @return string Rückgabewert.
+     */
+    public static function this_file(): string {
+        return basename(self::serverVar("SCRIPT_FILENAME", "index.php"));
     }
 
-    public static function this_path()
-    {
-        $scriptName = self::serverVar('SCRIPT_NAME', '');
-        return ltrim($scriptName, '/');
+    /**
+     * Verarbeitet die Funktion this_path.
+     * @return string Rückgabewert.
+     */
+    public static function this_path(): string {
+        return ltrim(self::serverVar("SCRIPT_NAME", ""), "/");
     }
 
-    public static function this_uri()
-    {
-        // Scheme
-        $https = self::serverVar('HTTPS', 'off');
-        $scheme = (strtolower($https) === 'on') ? 'https://' : 'http://';
-
-        // Host
-        $host = self::serverVar('HTTP_HOST', 'localhost');
-
-        // URI
-        $uri = self::serverVar('REQUEST_URI', '/');
+    /**
+     * Verarbeitet die Funktion this_uri.
+     * @return string Rückgabewert.
+     */
+    public static function this_uri(): string {
+        $https = self::serverVar("HTTPS", "off");
+        $scheme = strtolower($https) === "on" ? "https://" : "http://";
+        $host = self::serverVar("HTTP_HOST", "localhost");
+        $uri = self::serverVar("REQUEST_URI", "/");
 
         return $scheme . $host . $uri;
     }
 
-    public static function client_ip()
-    {
-        // Falls du später Proxies berücksichtigen willst, kannst du hier erweitern:
-        // HTTP_CLIENT_IP, HTTP_X_FORWARDED_FOR, etc.
-        $ip = self::serverVar('REMOTE_ADDR', '0.0.0.0');
-        $ip = str_replace(":", "-", $ip); // IPv6 -> kein Doppelpunkt in Dateinamen etc.
-
-        return $ip;
+    /**
+     * Verarbeitet die Funktion client_ip.
+     * @return string Rückgabewert.
+     */
+    public static function client_ip(): string {
+        return str_replace(":", "-", self::serverVar("REMOTE_ADDR", "0.0.0.0"));
     }
 
-    public static function DB_PATH()
-    {
+    /**
+     * Verarbeitet die Funktion d b_ p a t h.
+     * @return string Rückgabewert.
+     */
+    public static function DB_PATH(): string {
         $basePath = self::json_path();
-        $dbPath   = $basePath . 'GBDB/';
+        $dbPath = $basePath . "GBDB/";
 
-        // Basis-Ordner erstellen (rekursiv)
         if (!is_dir($basePath)) {
             if (!@mkdir($basePath, 0777, true) && !is_dir($basePath)) {
                 trigger_error("GBDB: Konnte Basis-Ordner '{$basePath}' nicht erstellen.", E_USER_WARNING);
             }
         }
 
-        // GBDB-Unterordner erstellen (rekursiv)
         if (!is_dir($dbPath)) {
             if (!@mkdir($dbPath, 0777, true) && !is_dir($dbPath)) {
                 trigger_error("GBDB: Konnte DB-Ordner '{$dbPath}' nicht erstellen.", E_USER_WARNING);
@@ -276,13 +529,11 @@ class Vars {
         return $dbPath;
     }
 
-    public static function jpretty()
-    {
-        if (self::json_pretty()) {
-            return defined('JSON_PRETTY_PRINT') ? JSON_PRETTY_PRINT : 128;
-        }
-
-        return 0;
+    /**
+     * Verarbeitet die Funktion jpretty.
+     * @return int Rückgabewert.
+     */
+    public static function jpretty(): int {
+        return self::json_pretty() ? JSON_PRETTY_PRINT : 0;
     }
 }
-?>

@@ -9,47 +9,99 @@ class Route {
     private static $currentMiddleware = [];
 
     /** Mittels Middleware registrieren */
+    /**
+     * Verarbeitet die Funktion middleware.
+     * @param callable $mw Übergabewert.
+     * @return self Rückgabewert.
+     */
     public static function middleware(callable $mw): self {
         self::$currentMiddleware[] = $mw;
         return new self;
     }
 
     /** GET */
+    /**
+     * Liest Daten aus der angegebenen Quelle.
+     * @param string $path Übergabewert.
+     * @param callable $callback Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function get(string $path, callable $callback): void {
         self::addRoute("GET", $path, $callback);
     }
 
     /** POST */
+    /**
+     * Verarbeitet die Funktion post.
+     * @param string $path Übergabewert.
+     * @param callable $callback Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function post(string $path, callable $callback): void {
         self::addRoute("POST", $path, $callback);
     }
 
     /** PUT */
+    /**
+     * Verarbeitet die Funktion put.
+     * @param string $path Übergabewert.
+     * @param callable $callback Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function put(string $path, callable $callback): void {
         self::addRoute("PUT", $path, $callback);
     }
 
     /** DELETE */
+    /**
+     * Löscht Daten aus der angegebenen Quelle.
+     * @param string $path Übergabewert.
+     * @param callable $callback Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function delete(string $path, callable $callback): void {
         self::addRoute("DELETE", $path, $callback);
     }
 
     /** PATCH */
+    /**
+     * Verarbeitet die Funktion patch.
+     * @param string $path Übergabewert.
+     * @param callable $callback Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function patch(string $path, callable $callback): void {
         self::addRoute("PATCH", $path, $callback);
     }
 
     /** Custom 404 */
+    /**
+     * Verarbeitet die Funktion not found.
+     * @param callable $callback Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function notFound(callable $callback): void {
         self::$notFoundHandler = $callback;
     }
 
     /** Custom 405 */
+    /**
+     * Verarbeitet die Funktion method not allowed.
+     * @param callable $callback Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function methodNotAllowed(callable $callback): void {
         self::$methodNotAllowedHandler = $callback;
     }
 
     /** (Privat) Route registrieren */
+    /**
+     * Verarbeitet die Funktion add route.
+     * @param string $method Übergabewert.
+     * @param string $path Übergabewert.
+     * @param callable $callback Übergabewert.
+     * @return void Rückgabewert.
+     */
     private static function addRoute(string $method, string $path, callable $callback): void {
         self::$routes[$method][$path] = [
             "callback" => $callback,
@@ -61,6 +113,10 @@ class Route {
     }
 
     /** Dispatcher */
+    /**
+     * Verarbeitet die Funktion dispatch.
+     * @return void Rückgabewert.
+     */
     public static function dispatch(): void {
         $method = $_SERVER["REQUEST_METHOD"] ?? "GET";
         $uri = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);
@@ -128,6 +184,11 @@ class Route {
     }
 
     /** Parameter-Pattern konvertieren */
+    /**
+     * Verarbeitet die Funktion make pattern.
+     * @param string $path Übergabewert.
+     * @return string Rückgabewert.
+     */
     private static function makePattern(string $path): string {
         // Optional param: {id?}
         $path = preg_replace('/\{([^\/\}]+)\?\}/', '(?:\/([^\/]+))?', $path);

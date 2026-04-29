@@ -3,6 +3,14 @@
 class ReCaptcha {
 
     /**
+     * Verarbeitet die Funktion load js api.
+     * @return void Rückgabewert.
+     */
+    public function loadJsApi(): void {
+        echo '<script src="https://www.google.com/recaptcha/api.js" async defer></script>';
+    }
+
+    /**
      * Name der POST Variable
      */
     public static function postName(): string {
@@ -16,7 +24,7 @@ class ReCaptcha {
         $wc = Vars::reCaptcha_website_key();
         $cb = htmlspecialchars($callbackJs, ENT_QUOTES);
 
-        return '<div class="g-recaptcha" data-sitekey="' . $wc . '" data-callback="' . $cb . '"></div>';
+        return '<div class="g-recaptcha" data-sitekey="' . $wc . '" data-callback="' . $cb . '" data-action="FORM"></div>';
     }
 
     /**
@@ -55,4 +63,3 @@ class ReCaptcha {
         return !empty($json["success"]);
     }
 }
-

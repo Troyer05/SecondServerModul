@@ -2,11 +2,21 @@
 
 class GreenQL {
 
+    /**
+     * Verarbeitet die Funktion clean name.
+     * @param string $name Übergabewert.
+     * @return string Rückgabewert.
+     */
     public static function cleanName(string $name): string {
         $name = trim($name);
         return preg_replace('/[^a-zA-Z0-9_\-]/', '', $name) ?? '';
     }
 
+    /**
+     * Verarbeitet die Funktion unquote.
+     * @param string $value Übergabewert.
+     * @return mixed Rückgabewert.
+     */
     public static function unquote(string $value): mixed {
         $value = trim($value);
 
@@ -29,6 +39,11 @@ class GreenQL {
         return $value;
     }
 
+    /**
+     * Verarbeitet die Funktion strip comments.
+     * @param string $script Übergabewert.
+     * @return string Rückgabewert.
+     */
     public static function stripComments(string $script): string {
         $lines = preg_split('/\r\n|\r|\n/', $script);
         $out = [];
@@ -80,6 +95,11 @@ class GreenQL {
         return trim(implode("\n", $out));
     }
 
+    /**
+     * Verarbeitet die Funktion split commands.
+     * @param string $script Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function splitCommands(string $script): array {
         $script = self::stripComments($script);
         $commands = [];
@@ -134,6 +154,13 @@ class GreenQL {
         return $commands;
     }
 
+    /**
+     * Verarbeitet die Funktion evaluate value.
+     * @param string $value Übergabewert.
+     * @param array $vars Übergabewert.
+     * @param array $params Übergabewert.
+     * @return mixed Rückgabewert.
+     */
     public static function evaluateValue(string $value, array $vars = [], array $params = []): mixed {
         $value = trim($value);
 
@@ -153,6 +180,12 @@ class GreenQL {
         return self::unquote($value);
     }
 
+    /**
+     * Verarbeitet die Funktion resolve name token.
+     * @param string $token Übergabewert.
+     * @param array $vars Übergabewert.
+     * @return string Rückgabewert.
+     */
     public static function resolveNameToken(string $token, array $vars = []): string {
         $token = trim($token);
 
@@ -167,6 +200,12 @@ class GreenQL {
         return self::cleanName($token);
     }
 
+    /**
+     * Verarbeitet die Funktion parse list.
+     * @param string $raw Übergabewert.
+     * @param array $vars Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function parseList(string $raw, array $vars = []): array {
         $parts = preg_split('/\s*,\s*/', trim($raw));
         $out = [];
@@ -181,6 +220,13 @@ class GreenQL {
         return array_values(array_filter($out));
     }
 
+    /**
+     * Verarbeitet die Funktion parse assignments.
+     * @param string $raw Übergabewert.
+     * @param array $vars Übergabewert.
+     * @param array $params Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function parseAssignments(string $raw, array $vars = [], array $params = []): array {
         $raw = trim($raw);
 
@@ -199,6 +245,13 @@ class GreenQL {
         return $out;
     }
 
+    /**
+     * Verarbeitet die Funktion parse where.
+     * @param string $raw Übergabewert.
+     * @param array $vars Übergabewert.
+     * @param array $params Übergabewert.
+     * @return ?array Rückgabewert.
+     */
     public static function parseWhere(string $raw, array $vars = [], array $params = []): ?array {
         $raw = trim($raw);
 
@@ -215,6 +268,12 @@ class GreenQL {
         ];
     }
 
+    /**
+     * Verarbeitet die Funktion row match.
+     * @param array $row Übergabewert.
+     * @param ?array $where Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function rowMatch(array $row, ?array $where): bool {
         if ($where === null) return true;
 
@@ -244,6 +303,13 @@ class GreenQL {
         return false;
     }
 
+    /**
+     * Verarbeitet die Funktion sort rows.
+     * @param array & $rows Übergabewert.
+     * @param ?string $field Übergabewert.
+     * @param string $dir Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function sortRows(array &$rows, ?string $field, string $dir = 'ASC'): void {
         if ($field === null || $field === '') return;
 
@@ -261,11 +327,23 @@ class GreenQL {
         });
     }
 
+    /**
+     * Verarbeitet die Funktion get rows.
+     * @param string $db Übergabewert.
+     * @param string $table Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function getRows(string $db, string $table): array {
         $rows = GBDB::getData($db, $table);
         return is_array($rows) ? $rows : [];
     }
 
+    /**
+     * Verarbeitet die Funktion get table keys.
+     * @param string $db Übergabewert.
+     * @param string $table Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function getTableKeys(string $db, string $table): array {
         $keys = GBDB::getKeys($db, $table);
 
@@ -280,6 +358,17 @@ class GreenQL {
         return [];
     }
 
+    /**
+     * Verarbeitet die Funktion select rows.
+     * @param string $db Übergabewert.
+     * @param string $table Übergabewert.
+     * @param array $columns Übergabewert.
+     * @param ?array $where Übergabewert.
+     * @param ?string $sortField Übergabewert.
+     * @param string $sortDir Übergabewert.
+     * @param ?int $limit Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function selectRows(string $db, string $table, array $columns = ['*'], ?array $where = null, ?string $sortField = null, string $sortDir = 'ASC', ?int $limit = null): array {
         $rows = self::getRows($db, $table);
 
@@ -315,6 +404,11 @@ class GreenQL {
         ];
     }
 
+    /**
+     * Verarbeitet die Funktion stats.
+     * @param string $db Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function stats(string $db): array {
         $tables = GBDB::listTables($db);
         $rows = 0;
@@ -330,6 +424,14 @@ class GreenQL {
         ];
     }
 
+    /**
+     * Verarbeitet die Funktion command.
+     * @param string $command Übergabewert.
+     * @param array & $ctx Übergabewert.
+     * @param array & $vars Übergabewert.
+     * @param array $params Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function command(string $command, array &$ctx = [], array &$vars = [], array $params = []): array {
         $command = trim($command);
 
@@ -523,6 +625,53 @@ class GreenQL {
             return [
                 'ok' => true,
                 'message' => 'Tabelle erstellt: ' . $table,
+                'ctx' => $ctx,
+                'refresh' => true
+            ];
+        }
+
+        if (preg_match('/^ALTER\s+TABLE\s+([a-zA-Z0-9_\-]+)\s+ADD(?:\s+COLUMN)?\s+([a-zA-Z0-9_\-]+)(?:\s+(?:DEFAULT\s+)?(.+?))?(?:\s+IN\s+([a-zA-Z0-9_\-]+))?$/i', $command, $m)) {
+            $table = self::resolveNameToken((string)$m[1], $vars);
+            $column = self::resolveNameToken((string)$m[2], $vars);
+            $default = isset($m[3]) ? self::evaluateValue((string)$m[3], $vars, $params) : '';
+            $db = self::resolveNameToken((string)($m[4] ?? ($ctx['db'] ?? '')), $vars);
+
+            if ($db === '' || $table === '') {
+                return [
+                    'ok' => false,
+                    'message' => 'Base oder Tabelle fehlt.',
+                    'ctx' => $ctx
+                ];
+            }
+
+            if ($column === '' || $column === 'id') {
+                return [
+                    'ok' => false,
+                    'message' => 'Spaltenname ungültig.',
+                    'ctx' => $ctx
+                ];
+            }
+
+            $keysBefore = self::getTableKeys($db, $table);
+            $existsBefore = in_array($column, $keysBefore, true);
+            $ok = GBDB::addColumn($db, $table, $column, $default);
+
+            if (!$ok) {
+                return [
+                    'ok' => false,
+                    'message' => 'Spalte konnte nicht hinzugefügt werden.',
+                    'ctx' => $ctx
+                ];
+            }
+
+            $ctx['db'] = $db;
+            $ctx['table'] = $table;
+
+            return [
+                'ok' => true,
+                'message' => $existsBefore
+                    ? 'Spalte bereits vorhanden: ' . $column
+                    : 'Spalte hinzugefügt: ' . $column,
                 'ctx' => $ctx,
                 'refresh' => true
             ];
@@ -841,6 +990,13 @@ class GreenQL {
         ];
     }
 
+    /**
+     * Verarbeitet die Funktion run.
+     * @param string $script Übergabewert.
+     * @param array $ctx Übergabewert.
+     * @param array $params Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function run(string $script, array $ctx = [], array $params = []): array {
         $commands = self::splitCommands(trim($script));
         $messages = [];

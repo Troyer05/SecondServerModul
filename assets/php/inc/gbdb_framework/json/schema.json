@@ -1,0 +1,54 @@
+{
+    "main": {
+        "users": {
+            "uid": "",
+            "username": "",
+            "password": "",
+            "email": "",
+            "name": ""
+        }
+    },
+    "userdb": {
+        "jwt": {
+            "uid": "",
+            "token": "",
+            "exp": ""
+        },
+        "mailv": {
+            "uid": "",
+            "token": "",
+            "exp": ""
+        },
+        "meta": {
+            "uid": "",
+            "vorname": "",
+            "nachname": "",
+            "telefon": "",
+            "mobil": "",
+            "adresse": "",
+            "gender": "",
+            "bio": "",
+            "image": ""
+        },
+        "pwf": {
+            "uid": "",
+            "token": "",
+            "exp": ""
+        },
+        "tfa": {
+            "uid": "",
+            "code": "",
+            "exp": ""
+        },
+        "users": {
+            "uid": "",
+            "username": "",
+            "email": "",
+            "password": "",
+            "active": "",
+            "rolle": "",
+            "datum": "",
+            "tfa": ""
+        }
+    }
+}

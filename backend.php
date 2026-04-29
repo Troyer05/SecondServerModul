@@ -11,18 +11,19 @@ if (!is_array($body)) {
 }
 
 if (isset($body["do"]) && $body["do"] === "gtoken") {
-    $token = [];
+    $token = "";
 
-    if ($body["sauth"] == hash('sha256', Vars::srvp_static_key())) {
+    if (($body["sauth"] ?? "") == hash("sha256", Vars::srvp_static_key())) {
         $tokens = read_tokens();
 
         do {
             $retry = false;
-            $token = hash('sha256', bin2hex(random_bytes(256)));
+            $token = hash("sha256", bin2hex(random_bytes(256)));
 
             foreach ($tokens as $t) {
-                if ($t["token"] == $token) {
+                if (($t["token"] ?? "") == $token) {
                     $retry = true;
+                    break;
                 }
             }
         } while ($retry);
@@ -39,52 +40,39 @@ test_param(["do"], $body);
 $do = $body["do"];
 
 if ($do == "get") {
-    $ts = ["db", "table"];
-
-    test_param($ts, $body);
+    test_param(["db", "table"], $body);
 
     if (isset($body["where"]) && isset($body["is"])) {
-        $e = DB_GET($body["db"], $body["table"], true, $body["where"], $body["is"]);
-    } else {
-        $e = DB_GET($body["db"], $body["table"]);
+        resp(200, DB_GET($body["db"], $body["table"], true, $body["where"], $body["is"]));
     }
 
-    resp(200, $e);
+    resp(200, DB_GET($body["db"], $body["table"]));
 }
 
 if ($do == "put") {
-    $ts = ["db", "table", "data"];
-
-    test_param($ts, $body);
+    test_param(["db", "table", "data"], $body);
 
     $id = DB_PUT($body["db"], $body["table"], $body["data"]);
 
     if ($id !== false && $id != -1) {
-        $data = [
+        resp(200, [
             "id" => $id,
             "inserted" => date("d.m.Y H:i:s")
-        ];
-
-        resp(200, $data);
+        ]);
     }
 
     resp(400, "Wrong Data provided.");
 }
 
 if ($do == "delete") {
-    $ts = ["db", "table", "where", "is"];
-
-    test_param($ts, $body);
+    test_param(["db", "table", "where", "is"], $body);
 
     DB_DELETE($body["db"], $body["table"], $body["where"], $body["is"]);
-
     resp(200, "Data deleted successfully.");
 }
 
 if ($do == "edit") {
-    $ts = ["db", "table", "where", "is", "data"];
-
-    test_param($ts, $body);
+    test_param(["db", "table", "where", "is", "data"], $body);
 
     $ok = DB_EDIT($body["db"], $body["table"], $body["where"], $body["is"], $body["data"]);
 
@@ -95,29 +83,33 @@ if ($do == "edit") {
     resp(400, "Edit failed.");
 }
 
-
 if ($do == "query") {
     test_param(["query"], $body);
 
-    $ctx = [];
-    $params = [];
-
-    if (isset($body["ctx"]) && is_array($body["ctx"])) {
-        $ctx = $body["ctx"];
-    }
-
-    if (isset($body["params"]) && is_array($body["params"])) {
-        $params = $body["params"];
-    }
+    $ctx = isset($body["ctx"]) && is_array($body["ctx"]) ? $body["ctx"] : [];
+    $params = isset($body["params"]) && is_array($body["params"]) ? $body["params"] : [];
 
     resp(200, DB_QUERY($body["query"], $ctx, $params));
+}
+
+if ($do == "runscript") {
+    test_param(["path"], $body);
+
+    $ctx = isset($body["ctx"]) && is_array($body["ctx"]) ? $body["ctx"] : [];
+    $params = isset($body["params"]) && is_array($body["params"]) ? $body["params"] : [];
+
+    resp(200, Srv::runScript($body["path"], $params, $ctx));
+}
+
+if ($do == "auth") {
+    test_param(["action"], $body);
+    resp(200, Srv::auth($body["action"], $body));
 }
 
 if ($do == "srv_enqueue") {
     test_param(["service", "action"], $body);
 
     $payload = $body["payload"] ?? [];
-
     $id = Srv::enqueue($body["service"], $body["action"], $payload);
 
     resp(200, [
@@ -128,37 +120,24 @@ if ($do == "srv_enqueue") {
 
 if ($do == "srv_run_one") {
     test_param(["id"], $body);
-
-    $result = Srv::runOne((int)$body["id"]);
-
-    resp(200, $result);
+    resp(200, Srv::runOne((int)$body["id"]));
 }
 
 if ($do == "srv_status") {
     if (isset($body["id"])) {
-        $job = Srv::getJob((int)$body["id"]);
-        resp(200, $job);
+        resp(200, Srv::getJob((int)$body["id"]));
     }
 
-    $jobs = Srv::getJobs();
-    resp(200, $jobs);
+    resp(200, Srv::getJobs());
 }
 
 if ($do == "srv_logs") {
     test_param(["job_id"], $body);
-
-    $file = __DIR__ . "/../srv_logs/" . $body["job_id"] . ".log";
-
-    if (!file_exists($file)) {
-        resp(404, "Log not found.");
-    }
-
-    $lines = file($file, FILE_IGNORE_NEW_LINES);
-    $entries = array_map(fn($l) => json_decode($l, true), $lines);
-
-    resp(200, $entries);
+    resp(200, Srv::logs((int)$body["job_id"]));
 }
 
 if ($do == "srv_jobs") {
     resp(200, Srv::getJobs());
 }
+
+resp(404, "Unknown backend action: " . $do);

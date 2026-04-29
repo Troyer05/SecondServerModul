@@ -3,6 +3,13 @@
 class Http {
 
     /** Führt einen HTTP-GET-Request aus */
+    /**
+     * Liest Daten aus der angegebenen Quelle.
+     * @param string $url Übergabewert.
+     * @param array $headers Übergabewert.
+     * @param int $timeout Übergabewert.
+     * @return string|false Rückgabewert.
+     */
     public static function get(string $url, array $headers = [], int $timeout = 10): string|false {
         if (function_exists('curl_init')) {
             $ch = curl_init($url);
@@ -38,6 +45,14 @@ class Http {
     }
 
     /** Führt einen HTTP-POST-Request aus */
+    /**
+     * Verarbeitet die Funktion post.
+     * @param string $url Übergabewert.
+     * @param array $data Übergabewert.
+     * @param array $headers Übergabewert.
+     * @param int $timeout Übergabewert.
+     * @return string|false Rückgabewert.
+     */
     public static function post(string $url, array $data = [], array $headers = [], int $timeout = 10): string|false {
         $json = json_encode($data, JSON_UNESCAPED_UNICODE);
 
@@ -82,12 +97,12 @@ class Http {
         return @file_get_contents($url, false, stream_context_create($opts));
     }
 
-    /** ================================
-     *  🔥 PREMIUM SEND MAIL FUNKTION 🔥
-     *  ================================ */
+    /**
+     * Verarbeitet die Funktion send mail.
+     * @param array $mail Übergabewert.
+     * @return bool|array Rückgabewert.
+     */
     public static function sendMail(array $mail): bool|array {
-
-        // Pflichtfelder prüfen
         $required = ["to_name", "to_email", "from_name", "from_email", "subject", "mail_content"];
 
         foreach ($required as $key) {
@@ -96,13 +111,9 @@ class Http {
             }
         }
 
-        // Endpunkt deiner Mail-API
-        $url = "https://greenbucket.haugga.de/gbdb/mail/index.php";
+        $url = "https://museumqr.de/mailing/index.php";
 
-        // Header (angepasst an dein System)
         $headers = [
-            "key"  => "63b773e1983ab3a64b2b088660019bb749078b4fe25bc4718636ec14543a1ccb",
-            "test" => "aaa",
             "Accept" => "application/json"
         ];
 
@@ -125,6 +136,12 @@ class Http {
 
 
     /** JSON Antwort an Browser */
+    /**
+     * Verarbeitet die Funktion json response.
+     * @param array $data Übergabewert.
+     * @param int $status Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function jsonResponse(array $data, int $status = 200): void {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
@@ -135,6 +152,12 @@ class Http {
     }
 
     /** Weiterleitung */
+    /**
+     * Verarbeitet die Funktion redirect.
+     * @param string $url Übergabewert.
+     * @param int $status Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function redirect(string $url, int $status = 302): void {
         http_response_code($status);
         header("Location: $url");
@@ -143,6 +166,10 @@ class Http {
     }
 
     /** Request header */
+    /**
+     * Verarbeitet die Funktion get headers.
+     * @return array Rückgabewert.
+     */
     public static function getHeaders(): array {
         if (function_exists('getallheaders')) {
             return getallheaders();
@@ -163,17 +190,29 @@ class Http {
     }
 
     /** GET / POST */
+    /**
+     * Verarbeitet die Funktion method.
+     * @return string Rückgabewert.
+     */
     public static function method(): string {
         return strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
     }
 
     /** JSON? */
+    /**
+     * Verarbeitet die Funktion is json.
+     * @return bool Rückgabewert.
+     */
     public static function isJson(): bool {
         $ctype = strtolower($_SERVER['CONTENT_TYPE'] ?? '');
         return str_contains($ctype, 'application/json');
     }
 
     /** JSON Body */
+    /**
+     * Verarbeitet die Funktion json input.
+     * @return array Rückgabewert.
+     */
     public static function jsonInput(): array {
         $raw = file_get_contents('php://input');
         $parsed = json_decode($raw, true);
@@ -182,6 +221,11 @@ class Http {
     }
 
     /** Header-Tools */
+    /**
+     * Verarbeitet die Funktion format headers.
+     * @param array $headers Übergabewert.
+     * @return array Rückgabewert.
+     */
     private static function formatHeaders(array $headers): array {
         $result = [];
 
@@ -192,6 +236,11 @@ class Http {
         return $result;
     }
 
+    /**
+     * Verarbeitet die Funktion implode headers.
+     * @param array $headers Übergabewert.
+     * @return string Rückgabewert.
+     */
     private static function implodeHeaders(array $headers): string {
         $r = "";
 

@@ -2,6 +2,11 @@
 
 class FS {
     /** Sichere Ordner-Erstellung */
+    /**
+     * Verarbeitet die Funktion create folder.
+     * @param string $pathAndName Übergabewert.
+     * @return void Rückgabewert.
+     */
     public static function createFolder(string $pathAndName): void {
         if (!is_dir($pathAndName)) {
             @mkdir($pathAndName, 0777, true);
@@ -9,6 +14,14 @@ class FS {
     }
 
     /** File schreiben + Stream-Option */
+    /**
+     * Verarbeitet die Funktion write.
+     * @param string $file Übergabewert.
+     * @param mixed $data Übergabewert.
+     * @param bool $stream Übergabewert.
+     * @param bool $overwrite Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function write(string $file, mixed $data, bool $stream = false, bool $overwrite = false): bool {
         self::createFolder(dirname($file));
 
@@ -31,12 +44,22 @@ class FS {
     }
 
     /** Datei lesen */
+    /**
+     * Verarbeitet die Funktion read.
+     * @param string $file Übergabewert.
+     * @return mixed Rückgabewert.
+     */
     public function read(string $file): mixed {
         if (!is_file($file)) return "";
         return file_get_contents($file);
     }
 
     /** Sicheres rekursives Löschen eines Ordners */
+    /**
+     * Verarbeitet die Funktion delete directory.
+     * @param string $dir Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function deleteDirectory(string $dir): bool {
         $dir = rtrim($dir, "/");
 
@@ -66,6 +89,11 @@ class FS {
     }
 
     /** Ordnergröße */
+    /**
+     * Verarbeitet die Funktion get folder size.
+     * @param string $path Übergabewert.
+     * @return string Rückgabewert.
+     */
     public static function getFolderSize(string $path): string {
         if (!is_dir($path)) {
             return "0 B";
@@ -84,6 +112,11 @@ class FS {
     }
 
     /** Löscht alle Dateien innerhalb eines Ordners */
+    /**
+     * Verarbeitet die Funktion delete files.
+     * @param string $path Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function deleteFiles(string $path): bool {
         if (!is_dir($path)) {
             return false;

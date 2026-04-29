@@ -71,6 +71,13 @@ class DatabaseBridge {
     // INSERT
     // ---------------------------------------------------------
 
+    /**
+     * Fügt neue Daten ein.
+     * @param string $db Übergabewert.
+     * @param string $table Übergabewert.
+     * @param array $data Übergabewert.
+     * @return mixed Rückgabewert.
+     */
     public static function insert(string $db, string $table, array $data) {
         if (self::isGBDB()) {
             return GBDB::insertData($db, $table, $data);
@@ -90,6 +97,14 @@ class DatabaseBridge {
     // DELETE
     // ---------------------------------------------------------
 
+    /**
+     * Löscht Daten aus der angegebenen Quelle.
+     * @param string $db Übergabewert.
+     * @param string $table Übergabewert.
+     * @param string $where Übergabewert.
+     * @param string|int|float $is Übergabewert.
+     * @return mixed Rückgabewert.
+     */
     public static function delete(string $db, string $table, string $where, string|int|float $is) {
         if (self::isGBDB()) {
             return GBDB::deleteData($db, $table, $where, $is);

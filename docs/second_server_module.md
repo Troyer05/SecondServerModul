@@ -11,7 +11,7 @@ Wichtig ist: Die Remote-Schicht ist nicht "anders" als lokal. Sie bildet die lok
 
 ## API-Prinzip
 
-`SrvP` baut Requests an `api.php` und übernimmt dabei Auth, Token-Erzeugung und Transport.
+`SrvP` baut Requests an `backend.php` und übernimmt dabei Auth, Token-Erzeugung und Transport.
 
 ### Direktmethoden
 

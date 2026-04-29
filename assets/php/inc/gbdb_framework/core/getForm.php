@@ -2,7 +2,9 @@
 
 class GetForm {
     /**
-     * NICHT ANRÜHREN – bleibt exakt wie im Original.
+     * Verarbeitet die Funktion get dropdown.
+     * @param mixed $dropdown Übergabewert.
+     * @return mixed Rückgabewert.
      */
     public static function getDropdown(mixed $dropdown): mixed {
         $e = "";

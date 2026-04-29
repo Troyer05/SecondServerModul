@@ -1,6 +1,157 @@
 <?php
 
 class GBDB {
+    private const SCHEMA_FILE = "assets/php/inc/gbdb_framework/json/schema.json";
+    
+    /**
+     * Verarbeitet die Funktion root path.
+     * @return string Rückgabewert.
+     */
+    private static function rootPath(): string {
+        return dirname(__DIR__, 5);
+    }
+
+    /**
+     * Verarbeitet die Funktion schema path.
+     * @return string Rückgabewert.
+     */
+    private static function schemaPath(): string {
+        return self::rootPath() . "/" . self::SCHEMA_FILE;
+    }
+
+    /**
+     * Verarbeitet die Funktion read schema.
+     * @return array Rückgabewert.
+     */
+    private static function readSchema(): array {
+        $file = self::schemaPath();
+
+        if (!is_file($file)) return [];
+
+        $json = json_decode((string)@file_get_contents($file), true);
+        return is_array($json) ? $json : [];
+    }
+
+    /**
+     * Verarbeitet die Funktion write schema.
+     * @param array $schema Übergabewert.
+     * @return bool Rückgabewert.
+     */
+    private static function writeSchema(array $schema): bool {
+        $file = self::schemaPath();
+        $dir = dirname($file);
+
+        if (!is_dir($dir)) @mkdir($dir, 0777, true);
+
+        ksort($schema, SORT_NATURAL | SORT_FLAG_CASE);
+
+        foreach ($schema as $db => $tables) {
+            if (!is_array($tables)) {
+                unset($schema[$db]);
+                continue;
+            }
+
+            ksort($tables, SORT_NATURAL | SORT_FLAG_CASE);
+            $schema[$db] = $tables;
+        }
+
+        $json = json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        if ($json === false) return false;
+
+        return @file_put_contents($file, $json . "\n", LOCK_EX) !== false;
+    }
+
+    /**
+     * Verarbeitet die Funktion set schema table.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param array $cols Übergabewert.
+     * @return void Rückgabewert.
+     */
+    private static function setSchemaTable(string $database, string $table, array $cols): void {
+        $database = Format::cleanString($database);
+        $table = Format::cleanString($table);
+
+        if ($database === "" || $table === "") return;
+
+        $schema = self::readSchema();
+
+        if (!isset($schema[$database]) || !is_array($schema[$database])) $schema[$database] = [];
+        if (!isset($schema[$database][$table]) || !is_array($schema[$database][$table])) $schema[$database][$table] = [];
+
+        foreach ($cols as $col => $default) {
+            if (is_int($col)) {
+                $col = (string)$default;
+                $default = "";
+            }
+
+            $col = trim((string)$col);
+
+            if ($col === "" || $col === "id") continue;
+
+            if (!array_key_exists($col, $schema[$database][$table])) {
+                $schema[$database][$table][$col] = $default;
+            }
+        }
+
+        self::writeSchema($schema);
+    }
+
+    /**
+     * Verarbeitet die Funktion drop schema table.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @return void Rückgabewert.
+     */
+    private static function dropSchemaTable(string $database, string $table): void {
+        $database = Format::cleanString($database);
+        $table = Format::cleanString($table);
+
+        if ($database === "" || $table === "") return;
+
+        $schema = self::readSchema();
+
+        if (isset($schema[$database][$table])) unset($schema[$database][$table]);
+        if (isset($schema[$database]) && empty($schema[$database])) unset($schema[$database]);
+
+        self::writeSchema($schema);
+    }
+
+    /**
+     * Verarbeitet die Funktion drop schema database.
+     * @param string $database Übergabewert.
+     * @return void Rückgabewert.
+     */
+    private static function dropSchemaDatabase(string $database): void {
+        $database = Format::cleanString($database);
+
+        if ($database === "") return;
+
+        $schema = self::readSchema();
+
+        if (isset($schema[$database])) {
+            unset($schema[$database]);
+            self::writeSchema($schema);
+        }
+    }
+
+    /**
+     * Verarbeitet die Funktion auto compact.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @return void Rückgabewert.
+     */
+    private static function autoCompact(string $database, string $table): void {
+        self::compactTable($database, $table);
+    }
+
+    /**
+     * Verarbeitet die Funktion name token.
+     * @param string $plain Übergabewert.
+     * @param string $ns Übergabewert.
+     * @return string Rückgabewert.
+     */
     private static function nameToken(string $plain, string $ns = 'g'): string {
         $plain = (string)$plain;
         $key   = (string)Vars::cryptKey();
@@ -14,15 +165,29 @@ class GBDB {
         return 'gb_' . $safe;
     }
 
+    /**
+     * Verarbeitet die Funktion db index file.
+     * @return string Rückgabewert.
+     */
     private static function dbIndexFile(): string {
         return Vars::DB_PATH() . self::nameToken('__db_index__', 'meta') . Vars::data_extension();
     }
 
+    /**
+     * Verarbeitet die Funktion table index file by db token.
+     * @param string $dbToken Übergabewert.
+     * @return string Rückgabewert.
+     */
     private static function tableIndexFileByDbToken(string $dbToken): string {
         $dir = Vars::DB_PATH() . $dbToken . "/";
         return $dir . self::nameToken('__table_index__', 'meta') . Vars::data_extension();
     }
 
+    /**
+     * Verarbeitet die Funktion read index.
+     * @param string $file Übergabewert.
+     * @return array Rückgabewert.
+     */
     private static function readIndex(string $file): array {
         $rows = self::ini($file);
 
@@ -31,8 +196,8 @@ class GBDB {
         }
 
         unset($rows[0]);
-        $rows = array_values($rows);
 
+        $rows = array_values($rows);
         $map = [];
 
         foreach ($rows as $r) {
@@ -50,8 +215,15 @@ class GBDB {
         return $map;
     }
 
+    /**
+     * Verarbeitet die Funktion write index.
+     * @param string $file Übergabewert.
+     * @param array $map Übergabewert.
+     * @return bool Rückgabewert.
+     */
     private static function writeIndex(string $file, array $map): bool {
         $db = [];
+
         $db[] = [
             "id"    => -1,
             "plain" => "-header-",
@@ -59,6 +231,7 @@ class GBDB {
         ];
 
         $id = 0;
+
         foreach ($map as $plain => $token) {
             $db[] = [
                 "id"    => $id++,
@@ -70,8 +243,15 @@ class GBDB {
         return self::writeTable($file, $db);
     }
 
+    /**
+     * Verarbeitet die Funktion get db token.
+     * @param string $dbPlain Übergabewert.
+     * @param bool $ensure Übergabewert.
+     * @return ?string Rückgabewert.
+     */
     private static function getDbToken(string $dbPlain, bool $ensure = false): ?string {
         $dbPlain = Format::cleanString($dbPlain);
+
         if ($dbPlain === "") return null;
 
         if (!Vars::crypt_data()) {
@@ -90,14 +270,16 @@ class GBDB {
         }
 
         $token = self::nameToken('db:' . $dbPlain, 'db');
-
         $used = array_flip(array_values($map));
+
         if (isset($used[$token])) {
             $n = 2;
+
             do {
                 $token2 = self::nameToken('db:' . $dbPlain . '#'.$n, 'db');
                 $n++;
             } while (isset($used[$token2]));
+
             $token = $token2;
         }
 
@@ -110,6 +292,13 @@ class GBDB {
         return $token;
     }
 
+    /**
+     * Verarbeitet die Funktion get table token.
+     * @param string $dbPlain Übergabewert.
+     * @param string $tablePlain Übergabewert.
+     * @param bool $ensure Übergabewert.
+     * @return ?string Rückgabewert.
+     */
     private static function getTableToken(string $dbPlain, string $tablePlain, bool $ensure = false): ?string {
         $dbPlain    = Format::cleanString($dbPlain);
         $tablePlain = Format::cleanString($tablePlain);
@@ -121,6 +310,7 @@ class GBDB {
         }
 
         $dbToken = self::getDbToken($dbPlain, $ensure);
+
         if ($dbToken === null) return null;
 
         $idxFile = self::tableIndexFileByDbToken($dbToken);
@@ -135,14 +325,16 @@ class GBDB {
         }
 
         $token = self::nameToken('tbl:' . $dbPlain . '|' . $tablePlain, 'tbl');
-
         $used = array_flip(array_values($map));
+
         if (isset($used[$token])) {
             $n = 2;
+
             do {
                 $token2 = self::nameToken('tbl:' . $dbPlain . '|' . $tablePlain . '#'.$n, 'tbl');
                 $n++;
             } while (isset($used[$token2]));
+
             $token = $token2;
         }
 
@@ -155,10 +347,17 @@ class GBDB {
         return $token;
     }
 
+    /**
+     * Verarbeitet die Funktion drop table from index.
+     * @param string $dbPlain Übergabewert.
+     * @param string $tablePlain Übergabewert.
+     * @return void Rückgabewert.
+     */
     private static function dropTableFromIndex(string $dbPlain, string $tablePlain): void {
         if (!Vars::crypt_data()) return;
 
         $dbToken = self::getDbToken($dbPlain, false);
+
         if ($dbToken === null) return;
 
         $idxFile = self::tableIndexFileByDbToken($dbToken);
@@ -170,13 +369,20 @@ class GBDB {
         }
     }
 
+    /**
+     * Verarbeitet die Funktion remove table index if exists.
+     * @param string $dbPlain Übergabewert.
+     * @return void Rückgabewert.
+     */
     private static function removeTableIndexIfExists(string $dbPlain): void {
         if (!Vars::crypt_data()) return;
 
         $dbToken = self::getDbToken($dbPlain, false);
+
         if ($dbToken === null) return;
 
         $idxFile = self::tableIndexFileByDbToken($dbToken);
+
         if (is_file($idxFile)) {
             @unlink($idxFile);
         }
@@ -187,6 +393,13 @@ class GBDB {
        CORE IO + LOCKING + META + APPEND
        ============================================================ */
 
+    /**
+     * Verarbeitet die Funktion make path.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param bool $ensure Übergabewert.
+     * @return string Rückgabewert.
+     */
     private static function makePath(string $database, string $table, bool $ensure = false): string {
         $table    = Format::cleanString($table);
         $database = Format::cleanString($database);
@@ -209,10 +422,16 @@ class GBDB {
         return $database . $table;
     }
 
+    /**
+     * Verarbeitet die Funktion ini.
+     * @param string $file Übergabewert.
+     * @return array Rückgabewert.
+     */
     private static function ini(string $file): array {
         if (!is_file($file)) return [];
 
         $raw = @file_get_contents($file);
+
         if ($raw === false) {
             error_log("[GBDB] Konnte Datei nicht lesen: {$file}");
             return [];
@@ -220,10 +439,12 @@ class GBDB {
 
         if (Vars::crypt_data()) {
             $decoded = Crypt::decode($raw);
+
             if ($decoded === null) {
                 error_log("[GBDB] Crypt::decode() fehlgeschlagen für: {$file}");
                 return [];
             }
+
             $db = json_decode($decoded, true);
         } else {
             $db = json_decode($raw, true);
@@ -232,20 +453,27 @@ class GBDB {
         return is_array($db) ? $db : [];
     }
 
+    /**
+     * Verarbeitet die Funktion write table.
+     * @param string $file Übergabewert.
+     * @param array $db Übergabewert.
+     * @return bool Rückgabewert.
+     */
     private static function writeTable(string $file, array $db): bool {
         $dir = dirname($file);
+
         if (!is_dir($dir)) {
             @mkdir($dir, 0777, true);
         }
 
         $json = json_encode($db, Vars::jpretty());
+
         if ($json === false) {
             error_log("[GBDB] json_encode() fehlgeschlagen für: {$file}");
             return false;
         }
 
         $payload = Vars::crypt_data() ? Crypt::encode($json) : $json;
-
         $tmp = $file . '.' . uniqid('tmp_', true);
 
         if (@file_put_contents($tmp, $payload, LOCK_EX) === false) {
@@ -256,12 +484,20 @@ class GBDB {
         if (!@rename($tmp, $file)) {
             @unlink($tmp);
             error_log("[GBDB] Konnte {$tmp} nicht nach {$file} verschieben");
+
             return false;
         }
 
         return true;
     }
 
+    /**
+     * Verarbeitet die Funktion lock file for table.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param bool $ensure Übergabewert.
+     * @return string Rückgabewert.
+     */
     private static function lockFileForTable(string $database, string $table, bool $ensure = false): string {
         return self::makePath($database, $table, $ensure) . ".lock";
     }
@@ -281,6 +517,7 @@ class GBDB {
         }
 
         $tbToken = self::getTableToken($database, $table, $ensure);
+
         if ($tbToken === null) {
             return $dir . self::nameToken('__meta__|__missing__', 'meta') . Vars::data_extension();
         }
@@ -303,6 +540,7 @@ class GBDB {
         }
 
         $tbToken = self::getTableToken($database, $table, $ensure);
+
         if ($tbToken === null) {
             return $dir . self::nameToken('__append__|__missing__', 'meta') . Vars::data_extension();
         }
@@ -310,13 +548,21 @@ class GBDB {
         return $dir . self::nameToken('__append__|' . $tbToken, 'meta') . Vars::data_extension();
     }
 
+    /**
+     * Verarbeitet die Funktion with table lock.
+     * @param string $lockFile Übergabewert.
+     * @param callable $fn Übergabewert.
+     * @return mixed Rückgabewert.
+     */
     private static function withTableLock(string $lockFile, callable $fn) {
         $dir = dirname($lockFile);
+
         if (!is_dir($dir)) {
             @mkdir($dir, 0777, true);
         }
 
         $h = @fopen($lockFile, "c+");
+
         if (!$h) {
             error_log("[GBDB] Konnte Lockfile nicht öffnen: {$lockFile}");
             return false;
@@ -327,6 +573,7 @@ class GBDB {
                 error_log("[GBDB] Konnte Lock nicht setzen: {$lockFile}");
                 return false;
             }
+
             return $fn();
         } finally {
             @flock($h, LOCK_UN);
@@ -334,6 +581,11 @@ class GBDB {
         }
     }
 
+    /**
+     * Verarbeitet die Funktion read meta.
+     * @param string $metaFile Übergabewert.
+     * @return array Rückgabewert.
+     */
     private static function readMeta(string $metaFile): array {
         $m = self::ini($metaFile);
 
@@ -351,21 +603,39 @@ class GBDB {
         ];
     }
 
+    /**
+     * Verarbeitet die Funktion write meta.
+     * @param string $metaFile Übergabewert.
+     * @param array $meta Übergabewert.
+     * @return bool Rückgabewert.
+     */
     private static function writeMeta(string $metaFile, array $meta): bool {
         $meta["updated_at"] = time();
         return self::writeTable($metaFile, [ $meta ]);
     }
 
+    /**
+     * Verarbeitet die Funktion is header row.
+     * @param array $row Übergabewert.
+     * @return bool Rückgabewert.
+     */
     private static function isHeaderRow(array $row): bool {
         return (isset($row["id"]) && (int)$row["id"] === -1);
     }
 
+    /**
+     * Verarbeitet die Funktion ensure header.
+     * @param array & $tableData Übergabewert.
+     * @param array $cols Übergabewert.
+     * @return void Rückgabewert.
+     */
     private static function ensureHeader(array &$tableData, array $cols): void {
         if (!empty($tableData) && isset($tableData[0]) && is_array($tableData[0])) {
             return;
         }
 
         $header = ["id" => -1];
+
         foreach ($cols as $c) {
             $c = (string)$c;
             if ($c === "" || $c === "id") continue;
@@ -375,23 +645,41 @@ class GBDB {
         $tableData = [ $header ];
     }
 
+    /**
+     * Verarbeitet die Funktion build row from header.
+     * @param array $header Übergabewert.
+     * @param array $data Übergabewert.
+     * @param int $id Übergabewert.
+     * @return array Rückgabewert.
+     */
     private static function buildRowFromHeader(array $header, array $data, int $id): array {
         $row = [];
+
         foreach ($header as $col => $default) {
             if ($col === "id") continue;
             $row[$col] = array_key_exists($col, $data) ? $data[$col] : $default;
         }
+
         $row["id"] = $id;
+
         return $row;
     }
 
+    /**
+     * Verarbeitet die Funktion append op.
+     * @param string $appendFile Übergabewert.
+     * @param array $op Übergabewert.
+     * @return bool Rückgabewert.
+     */
     private static function appendOp(string $appendFile, array $op): bool {
         $dir = dirname($appendFile);
+
         if (!is_dir($dir)) {
             @mkdir($dir, 0777, true);
         }
 
         $json = json_encode($op, 0);
+
         if ($json === false) return false;
 
         $line = Vars::crypt_data() ? Crypt::encode($json) : $json;
@@ -400,10 +688,16 @@ class GBDB {
         return (@file_put_contents($appendFile, $line, FILE_APPEND | LOCK_EX) !== false);
     }
 
+    /**
+     * Verarbeitet die Funktion read append ops.
+     * @param string $appendFile Übergabewert.
+     * @return array Rückgabewert.
+     */
     private static function readAppendOps(string $appendFile): array {
         if (!is_file($appendFile)) return [];
 
         $fh = @fopen($appendFile, "r");
+
         if (!$fh) return [];
 
         $ops = [];
@@ -428,6 +722,7 @@ class GBDB {
                 }
 
                 $op = json_decode($json, true);
+                
                 if (is_array($op) && isset($op["op"])) {
                     $ops[] = $op;
                 }
@@ -439,6 +734,12 @@ class GBDB {
         return $ops;
     }
 
+    /**
+     * Verarbeitet die Funktion apply ops.
+     * @param array $base Übergabewert.
+     * @param array $ops Übergabewert.
+     * @return array Rückgabewert.
+     */
     private static function applyOps(array $base, array $ops): array {
         if (empty($base)) return $base;
 
@@ -497,6 +798,11 @@ class GBDB {
         return $base;
     }
 
+    /**
+     * Verarbeitet die Funktion create database.
+     * @param string $name Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function createDatabase(string $name): bool {
         $name = Format::cleanString($name);
         if ($name === "") return false;
@@ -521,6 +827,11 @@ class GBDB {
         return false;
     }
 
+    /**
+     * Verarbeitet die Funktion delete database.
+     * @param string $name Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function deleteDatabase(string $name): bool {
         $name = Format::cleanString($name);
         if ($name === "") return false;
@@ -558,13 +869,20 @@ class GBDB {
         return false;
     }
 
+    /**
+     * Verarbeitet die Funktion create table.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param array $cols Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function createTable(string $database, string $table, array $cols): bool {
         $file       = self::makePath($database, $table, true);
         $lockFile   = self::lockFileForTable($database, $table, true);
         $metaFile   = self::metaFileForTable($database, $table, true);
         $appendFile = self::appendFileForTable($database, $table, true);
 
-        return (bool) self::withTableLock($lockFile, function () use ($file, $metaFile, $appendFile, $cols) {
+        $res = (bool) self::withTableLock($lockFile, function () use ($file, $metaFile, $appendFile, $cols) {
             if (file_exists($file)) return false;
 
             $header = ["id" => -1];
@@ -594,15 +912,124 @@ class GBDB {
 
             return true;
         });
+
+        if ($res) {
+            self::setSchemaTable($database, $table, $cols);
+            self::autoCompact($database, $table);
+        }
+
+        return $res;
     }
 
+    /**
+     * Verarbeitet die Funktion add column.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param string $column Übergabewert.
+     * @param mixed $default Übergabewert.
+     * @return bool Rückgabewert.
+     */
+    public static function addColumn(string $database, string $table, string $column, mixed $default = ""): bool {
+        $column = trim($column);
+
+        if ($column === '' || $column === 'id') return false;
+
+        $file       = self::makePath($database, $table);
+        $lockFile   = self::lockFileForTable($database, $table);
+        $metaFile   = self::metaFileForTable($database, $table);
+        $appendFile = self::appendFileForTable($database, $table);
+
+        $res = (bool) self::withTableLock($lockFile, function () use ($file, $metaFile, $appendFile, $column, $default) {
+            if (!file_exists($file)) return false;
+
+            $base = self::ini($file);
+            if (empty($base) || !isset($base[0]) || !is_array($base[0])) return false;
+
+            $ops  = self::readAppendOps($appendFile);
+            $full = self::applyOps($base, $ops);
+
+            if (empty($full) || !isset($full[0]) || !is_array($full[0]) || !self::isHeaderRow($full[0])) {
+                return false;
+            }
+
+            $header = $full[0];
+
+            if (array_key_exists($column, $header)) {
+                return true;
+            }
+
+            $newHeader = [];
+
+            foreach ($header as $key => $value) {
+                $newHeader[$key] = $value;
+
+                if ($key === 'id') {
+                    $newHeader[$column] = '-header-';
+                }
+            }
+
+            if (!array_key_exists($column, $newHeader)) {
+                $newHeader[$column] = '-header-';
+            }
+
+            $rebuilt = [$newHeader];
+            $rows = 0;
+
+            foreach ($full as $i => $row) {
+                if (!is_array($row)) continue;
+                if ($i === 0) continue;
+
+                if (!array_key_exists($column, $row)) {
+                    $row[$column] = $default;
+                }
+
+                $tmp = [];
+
+                foreach ($newHeader as $key => $_) {
+                    if ($key === 'id') continue;
+                    $tmp[$key] = array_key_exists($key, $row) ? $row[$key] : $default;
+                }
+
+                $tmp['id'] = isset($row['id']) ? (int)$row['id'] : 0;
+                $rebuilt[] = $tmp;
+                $rows++;
+            }
+
+            if (!self::writeTable($file, $rebuilt)) {
+                return false;
+            }
+
+            @file_put_contents($appendFile, '', LOCK_EX);
+
+            $meta = self::readMeta($metaFile);
+            $meta['rows'] = $rows;
+            $meta['append_ops'] = 0;
+            self::writeMeta($metaFile, $meta);
+
+            return true;
+        });
+
+        if ($res) {
+            self::setSchemaTable($database, $table, [$column => $default]);
+            self::autoCompact($database, $table);
+        }
+
+        return $res;
+    }
+
+    /**
+     * Verarbeitet die Funktion delete table.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function deleteTable(string $database, string $table): bool {
         $file       = self::makePath($database, $table);
         $lockFile   = self::lockFileForTable($database, $table);
         $metaFile   = self::metaFileForTable($database, $table);
         $appendFile = self::appendFileForTable($database, $table);
 
-        return (bool) self::withTableLock($lockFile, function () use ($database, $table, $file, $metaFile, $appendFile, $lockFile) {
+        $res = (bool) self::withTableLock($lockFile, function () use ($database, $table, $file, $metaFile, $appendFile, $lockFile) {
 
             if (!file_exists($file)) return false;
 
@@ -619,8 +1046,21 @@ class GBDB {
 
             return $ok;
         });
+
+        if ($res) {
+            self::dropSchemaTable($database, $table);
+        }
+
+        return $res;
     }
 
+    /**
+     * Verarbeitet die Funktion insert data.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param mixed $data Übergabewert.
+     * @return int Rückgabewert.
+     */
     public static function insertData(string $database, string $table, mixed $data): int {
         if (!is_array($data)) return -1;
 
@@ -666,9 +1106,21 @@ class GBDB {
             return $id;
         });
 
+        if (is_int($res) && $res > 0) {
+            self::autoCompact($database, $table);
+        }
+
         return is_int($res) ? $res : -1;
     }
 
+    /**
+     * Verarbeitet die Funktion delete data.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param mixed $where Übergabewert.
+     * @param mixed $is Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function deleteData(string $database, string $table, mixed $where, mixed $is): bool {
         $file = self::makePath($database, $table);
 
@@ -723,9 +1175,22 @@ class GBDB {
             return $changed;
         });
 
+        if ($res) {
+            self::autoCompact($database, $table);
+        }
+
         return (bool)$res;
     }
 
+    /**
+     * Verarbeitet die Funktion edit data.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param mixed $where Übergabewert.
+     * @param mixed $is Übergabewert.
+     * @param mixed $newData Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function editData(string $database, string $table, mixed $where, mixed $is, mixed $newData): bool {
         if (!is_array($newData)) return false;
 
@@ -789,6 +1254,10 @@ class GBDB {
             return true;
         });
 
+        if ($res) {
+            self::autoCompact($database, $table);
+        }
+
         return (bool)$res;
     }
 
@@ -833,11 +1302,23 @@ class GBDB {
         return $full;
     }
 
+    /**
+     * Verarbeitet die Funktion element exists.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @param mixed $where Übergabewert.
+     * @param mixed $is Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function elementExists(string $database, string $table, mixed $where, mixed $is): bool {
         $r = self::getData($database, $table, true, $where, $is);
         return is_array($r) && !empty($r);
     }
 
+    /**
+     * Verarbeitet die Funktion list d bs.
+     * @return array Rückgabewert.
+     */
     public static function listDBs(): array {
         $d = Vars::DB_PATH();
         if (!is_dir($d)) return [];
@@ -866,6 +1347,12 @@ class GBDB {
         return $out;
     }
 
+    /**
+     * Verarbeitet die Funktion list tables.
+     * @param string $database Übergabewert.
+     * @param bool $descending Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function listTables(string $database, bool $descending = false): array {
         $database = Format::cleanString($database);
         if ($database === "") return [];
@@ -926,6 +1413,12 @@ class GBDB {
         return $tables;
     }
     
+    /**
+     * Verarbeitet die Funktion compact table.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function compactTable(string $database, string $table): bool {
         $file = self::makePath($database, $table);
         if (!file_exists($file)) return false;
@@ -979,6 +1472,11 @@ class GBDB {
         return (bool)$res;
     }
 
+    /**
+     * Verarbeitet die Funktion delete all.
+     * @param string $database Übergabewert.
+     * @return bool Rückgabewert.
+     */
     public static function deleteAll(string $database): bool {
         $ok     = true;
         $tables = self::listTables($database);
@@ -996,9 +1494,19 @@ class GBDB {
             $ok = false;
         }
 
+        if ($ok) {
+            self::dropSchemaDatabase($database);
+        }
+
         return $ok;
     }
 
+    /**
+     * Verarbeitet die Funktion next i d.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @return int Rückgabewert.
+     */
     public static function nextID(string $database, string $table): int {
         $file = self::makePath($database, $table);
         if (!file_exists($file)) return 0;
@@ -1014,6 +1522,12 @@ class GBDB {
         return is_int($res) ? $res : 0;
     }
 
+    /**
+     * Verarbeitet die Funktion get keys.
+     * @param string $database Übergabewert.
+     * @param string $table Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function getKeys(string $database, string $table): array {
         $file = self::makePath($database, $table);
         $db   = self::ini($file);
@@ -1025,10 +1539,24 @@ class GBDB {
         return array_keys($db[0]);
     }
 
+    /**
+     * Führt eine GreenQL-Abfrage aus.
+     * @param string $script Übergabewert.
+     * @param array $ctx Übergabewert.
+     * @param array $params Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function query(string $script, array $ctx = [], array $params = []): array {
         return GreenQL::run($script, $ctx, $params);
     }
 
+    /**
+     * Führt ein Script aus und gibt das Ergebnis zurück.
+     * @param string $path Übergabewert.
+     * @param array $params Übergabewert.
+     * @param array $ctx Übergabewert.
+     * @return array Rückgabewert.
+     */
     public static function runScript(string $path, array $params = [], array $ctx = []): array {
         if (!file_exists($path)) {
             return [
