@@ -72,6 +72,11 @@ class Vars {
         "secret_key"  => "",
     ];
 
+    private const EQR_API = [
+        "url" => "",
+        "auth" => ""
+    ];
+
     private const INIT_COOKIES = [
         [
             "cookie_name"  => "TestCookie",
@@ -457,6 +462,14 @@ class Vars {
      */
     public static function init_session(): array {
         return self::INIT_SESSION;
+    }
+
+    public static function EQR_API_URL(): string {
+        return self::EQR_API["url"];
+    }
+
+    public static function EQR_API_AUTH(): string {
+        return self::EQR_API["auth"];
     }
 
     /**

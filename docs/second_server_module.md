@@ -1,147 +1,107 @@
-# SecondServer Module
+# SecondServerModul – ausführliche Dokumentation
 
-## Überblick
+## Zweck
 
-Das SecondServer Module ist die Remote-Schicht des Frameworks. Es erlaubt, dieselbe Datenbasis-Logik über HTTP anzusprechen, ohne dass der Client direkt lokal auf die GBDB-Dateien zugreift.
+Das SecondServerModul erlaubt es, ein Projekt in zwei Ebenen zu betreiben:
 
-Wichtig ist: Die Remote-Schicht ist nicht "anders" als lokal. Sie bildet die lokale Logik nach.
+- **Server 1 / Client-Seite**: Enthält die Anwendung, die `SrvP` nutzt.
+- **Server 2 / Backend-Seite**: Enthält `backend.php`, `Srv`, GBDB/GBDBv2 und optionale Module.
 
-- lokal: `GBDB::*`
-- remote: `SrvP::*`
+Dadurch kann eine Anwendung Daten, Jobs, Auth oder GreenQL-Scripte remote ausführen, ohne dass die Frontend-Seite direkten Dateisystemzugriff auf die Backend-Daten braucht.
 
-## API-Prinzip
+## Beteiligte Dateien
 
-`SrvP` baut Requests an `backend.php` und übernimmt dabei Auth, Token-Erzeugung und Transport.
-
-### Direktmethoden
-
-```php
-SrvP::getData("main", "users");
-SrvP::addData("main", "users", ["name" => "Markus"]);
-SrvP::editData("main", "users", "id", 1, ["name" => "MM"]);
-SrvP::deleteData("main", "users", "id", 1);
+```text
+assets/php/inc/gbdb_framework/core/srvp.php   Client-Klasse
+backend.php                                   JSON-Endpunkt auf Server 2
+assets/php/inc/Srv.php                        Backend-Service-Klasse
+functions.php                                 Backend-Helfer, DB-Routing, Tokenlogik
+assets/php/srv_modules/                       optionale Job-Module
 ```
 
-### Remote-GreenQL
+## Authentifizierungsablauf
+
+1. `SrvP` baut die Backend-URL aus `Vars::srvp_ip()` und `Vars::srvp_ssl()`.
+2. `SrvP` fordert mit `do=gtoken` und Hash des Static-Keys ein Einmal-Token an.
+3. Das Backend erzeugt ein Token und speichert es verschlüsselt/geschützt in `_srvtkns.cry`.
+4. `SrvP` sendet den eigentlichen Request mit `sauth` und `token`.
+5. `backend.php` prüft Methode, Static-Key und Token.
+6. Das Token wird verbraucht und kann nicht erneut genutzt werden.
+
+## Kontext und Instanzen
+
+Für GBDBv2 kann ein Kontext übergeben werden:
 
 ```php
-SrvP::query("PICK * FROM users IN main;");
-SrvP::query("SEED users WITH name='Lea' IN main;");
+SrvP::setInstance('kunde_a');
+SrvP::createDatabase('main');
 ```
 
-### Remote-Scripts
+Alternativ pro Aufruf:
 
 ```php
-SrvP::runScript("scripts/greenql/makeUser.gql", [
-    "uid" => $uid,
-    "name" => $name,
-    "username" => $username,
-    "email" => $email,
-    "password" => $password
+SrvP::getData('main', 'users', false, '', '', ['instance' => 'kunde_a']);
+```
+
+## Unterstützte Backend-Aktionen
+
+- `driver` – aktiven Treiber und Instanzstatus prüfen.
+- `instances`, `create_instance`, `delete_instance` – GBDBv2-Instanzen verwalten.
+- `bases`, `tables`, `create_base`, `delete_base`, `create_table`, `delete_table` – Struktur verwalten.
+- `get`, `put`, `edit`, `delete`, `keys` – Datenoperationen.
+- `query` – GreenQL/GreenQLv2 ausführen.
+- `runscript` – Script auf Backend-Seite lesen und ausführen.
+- `auth` – Remote-Auth-Funktionen nutzen.
+- `srv_enqueue`, `srv_run_one`, `srv_status`, `srv_logs`, `srv_jobs` – Job-System nutzen.
+
+## Beispiel: Remote-Tabelle anlegen
+
+```php
+include 'assets/php/inc/.config/_config.inc.php';
+
+SrvP::setInstance('kunde_a');
+SrvP::createDatabase('main');
+SrvP::createTable('main', 'logs', ['type', 'message', 'created']);
+SrvP::insertData('main', 'logs', [
+    'type' => 'info',
+    'message' => 'remote write ok',
+    'created' => date('Y-m-d H:i:s')
 ]);
 ```
 
-`SrvP::runScript()` liest das Script lokal in deinem Projekt und sendet den Scriptinhalt an die Remote-API, wo dieselbe GreenQL-Engine ausgeführt wird.
-
-## Wichtige Methoden
-
-### `SrvP::query()`
+## Beispiel: Script remote ausführen
 
 ```php
-SrvP::query(string $script, array $ctx = [], array $params = []): array
+$result = SrvP::runScript('scripts/greenql/makeUser.gql', [
+    'uid' => 'u001',
+    'username' => 'markus'
+]);
 ```
 
-### `SrvP::runScript()`
-
-```php
-SrvP::runScript(string $path, array $params = [], array $ctx = []): array
-```
-
-## Unterstützte API-`do` Werte
-
-- `get`
-- `put`
-- `edit`
-- `delete`
-- `query`
-- `srv_enqueue`
-- `srv_run_one`
-- `srv_status`
-- `srv_logs`
-- `srv_jobs`
-
-## `query` Payload
-
-```json
-{
-  "do": "query",
-  "query": "PICK * FROM users IN main;",
-  "ctx": {
-    "db": "main",
-    "table": "users"
-  },
-  "params": {
-    "uid": "u_1001"
-  }
-}
-```
-
-## Response-Struktur
-
-Die Remote-Antwort wird in das API-Standardformat gewrappt:
-
-```php
-[
-    "ok" => true,
-    "status" => 200,
-    "data" => [
-        "ok" => true,
-        "messages" => [...],
-        "results" => [...],
-        "keys" => [...],
-        "rows" => [...],
-        "ctx" => [...],
-        "vars" => [...],
-        "refresh" => true
-    ]
-]
-```
-
-## Unterschiede lokal vs. remote
-
-### Lokal
-
-- direkte Dateizugriffe
-- schneller im selben Projekt
-- ideal für serverseitige App-Logik
-
-### Remote
-
-- Zugriff über HTTP
-- gut für getrennte Systeme, Tools, Clients oder Services
-- ideal wenn ein anderer Server dieselbe Datenbasis kontrolliert
-
-## Wann GreenQL remote besonders stark ist
-
-- zentrale Admin-Tasks
-- Datenimport-Skripte
-- Setup-/Seed-Scripts auf Zielsystemen
-- standardisierte Automations-Abläufe
-- dieselben Scripts in mehreren Projekten oder Deployments
+Wichtig: Die Datei muss auf dem Backend-Server existieren. Der Client übermittelt nur den Pfad. `Srv::runScript()` prüft die Datei backendseitig.
 
 ## Sicherheit
 
-Die API nutzt:
+- Static-Key niemals kurz oder erratbar wählen.
+- `backend.php` nicht öffentlich dokumentieren.
+- Logs nicht mit Secrets befüllen.
+- Script-Ausführung nur mit erlaubten Pfaden/geschützter UI anbieten.
+- Bei Multi-Tenant-Nutzung immer Kontext/Instanz prüfen.
 
-- `sauth` per statischem Hash
-- Einmal-Token
-- serverseitige Prüfung in `general_auth()`
+## Debugging
 
-Das heißt: Der Client bekommt kurzlebige Tokens und jeder Request wird validiert.
+### `Empty response from backend`
 
-## Best Practice
+Backend nicht erreichbar, PHP-Fehler, falsche URL oder falsches Protokoll.
 
-- direkte CRUD-Aufrufe für einfache Einzelaktionen
-- `SrvP::query()` für Serienlogik
-- `SrvP::runScript()` für wiederverwendbare Geschäftsabläufe
-- Scripts versionieren und sauber benennen
+### `Static auth failed`
+
+`Vars::srvp_static_key()` unterscheidet sich zwischen Client und Backend.
+
+### `Token auth failed`
+
+Token-Datei nicht schreibbar, Token wurde schon verbraucht oder Systemzeit/Request-Ablauf ist fehlerhaft.
+
+### `Script not found on backend`
+
+Pfad existiert auf Client-Seite vielleicht, aber nicht auf Server 2. Scriptpfade immer aus Sicht des Backends prüfen.

@@ -1,6 +1,8 @@
 <?php
 
 /**
+ * @author Markus Müller
+ * 
  * greenbucket ShareSuite API Anbindung
  * API Doku: https://sharesuite.greenbucket.online/api_doc.php
  */

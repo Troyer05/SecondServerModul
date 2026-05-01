@@ -1,164 +1,53 @@
-# GBDB und GreenQL zusammen
+# GBDB und GreenQL zusammen nutzen
 
-## Grundsatz
+## Zusammenhang
 
-GBDB und GreenQL sind kein Entweder-oder. Sie gehören zusammen.
+GBDB ist die Datenbank-Engine, GreenQL ist die Script-Sprache darüber. Jede GreenQL-Operation wird am Ende in GBDB-Methoden wie `createDatabase`, `createTable`, `insertData`, `getData`, `editData` oder `deleteData` übersetzt.
 
-- **GBDB** ist die Methoden-API
-- **GreenQL** ist die Sprach-API
-- beide greifen auf dieselbe Datenbasis zu
+## Wann direkt GBDB nutzen?
 
-Du kannst also innerhalb eines Projekts völlig gemischt arbeiten.
-
-## Typische Mischformen
-
-### 1. Struktur per PHP, Abfragen per GreenQL
+Direkte GBDB-Aufrufe eignen sich, wenn Anwendungscode klar strukturierte Operationen ausführt:
 
 ```php
-GBDB::createDatabase("main");
-GBDB::createTable("main", "users", ["uid", "name", "role"]);
-
-$result = GBDB::query("PICK uid, name FROM users IN main WHERE role = 'admin';");
+GBDB::insertData('main', 'users', ['uid' => 'u001']);
 ```
 
-### 2. CRUD per PHP, Batch-Operationen per GreenQL
+Vorteile:
 
-```php
-GBDB::insertData("main", "users", [
-    "uid" => "u_1001",
-    "name" => "Markus",
-    "role" => "admin"
-]);
+- Typisch für PHP-Code am schnellsten nachvollziehbar.
+- Parameter sind normale Arrays.
+- Weniger Parser-Overhead.
 
-GBDB::query("
+## Wann GreenQL nutzen?
+
+GreenQL eignet sich, wenn Operationen als Script gespeichert, remote ausgeführt oder von einer Admin-UI bearbeitet werden sollen:
+
+```greenql
 ROOT main;
-SHOW TABLES;
-PICK * FROM users SORT id DESC LIMIT 20;
-");
+GROW TABLE users (uid, username);
+SEED users WITH uid="u001", username="markus";
 ```
 
-### 3. Prozesslogik in `.gql`, Business-Trigger in PHP
+Vorteile:
 
-```php
-if ($registerOk) {
-    GBDB::runScript("scripts/greenql/makeUser.gql", [
-        "uid" => $uid,
-        "name" => $name,
-        "username" => $username,
-        "email" => $email,
-        "password" => $password
-    ]);
-}
-```
+- Gut für Seeds und Migrationen.
+- Gut für wiederholbare Setup-Scripte.
+- Gut für Remote-Ausführung mit `SrvP::query()` oder `SrvP::runScript()`.
 
-## Warum GreenQL zusätzlich sinnvoll ist
+## GBDBv2 und GreenQLv2
 
-Direkte Methoden sind präzise. GreenQL ist aber deutlich stärker bei:
+Bei Multi-Instanz-Projekten sollte `GreenQLv2` genutzt werden. Instanzen trennen Daten sauber voneinander:
 
-- wiederverwendbaren Workflows
-- lesbaren Setup-Scripts
-- Serienaktionen in einer Datei
-- Dev-Tools / Admin-Oberflächen
-- Remote-Ausführung per SecondServer
-
-## GreenQL UI als Bindeglied
-
-`greenql_ui.php` verbindet beide Welten.
-
-### UI Mode
-
-hier geht es um klassische Oberfläche:
-
-- Base erstellen/löschen
-- Tabelle erstellen/umbauen/löschen
-- Entry erstellen/editieren/löschen
-
-### Query Mode
-
-hier geht es um die Sprachseite:
-
-- Query manuell schreiben
-- mehrere Kommandos in Folge ausführen
-- `.gql` Datei hochladen und direkt ausführen
-
-Beide Modi aktualisieren dieselbe Preview und dieselbe Strukturansicht.
-
-## Kontextsystem
-
-GreenQL kennt einen aktiven Kontext.
-
-```gql
+```greenql
+INSTANCE kunde_a;
 ROOT main;
-BRANCH users;
-PICK * FROM users;
+SELECT * FROM settings;
 ```
 
-`ROOT` setzt die aktive Base, `BRANCH` die aktive Tabelle. Dadurch musst du `IN main` nicht dauernd wiederholen.
+## Best Practices
 
-## Scriptsystem
-
-Mit `runScript()` kannst du GreenQL-Dateien wie kleine Module behandeln.
-
-### Beispielaufbau
-
-```txt
-/scripts
-    /greenql
-        makeUser.gql
-        createTicket.gql
-        setupDemo.gql
-```
-
-### Vorteil
-
-Die Fachlogik bleibt lesbar, versionierbar und vom PHP-Code entkoppelt.
-
-## Parameterisierte Scripts
-
-```gql
-declare _uid = param("uid");
-declare _role = param("role");
-SEED users WITH uid=_uid, role=_role IN main;
-```
-
-```php
-GBDB::runScript("scripts/greenql/makeUser.gql", [
-    "uid" => "u_1001",
-    "role" => "admin"
-]);
-```
-
-## Variablen in GreenQL
-
-```gql
-declare _base = "main";
-declare _table = "users";
-declare _state = "Aktiv";
-
-GROW BASE _base;
-SEED _table WITH status=_state IN _base;
-```
-
-Unterstützt werden aktuell Variablen in:
-
-- Base-Namen
-- Tabellennamen
-- `WITH`-Werten
-- `WHERE`-Werten
-- `SORT`-Feldern und Spaltenlisten, wenn dort Variable als Token genutzt wird
-
-## Kommentare
-
-```gql
-# Einzeiliger Kommentar
-SEED users WITH name="Markus" IN main; # Inline-Kommentar
-```
-
-## Best Practice für dein Framework
-
-Für dein System ist die sinnvollste Arbeitsweise meistens:
-
-- einfache CRUD-Operationen direkt in PHP
-- Setup-/Seed-/Serienlogik als `.gql`
-- Dev-Analyse und Testläufe über GreenQL UI
-- Remote-Wiederverwendung über `SrvP::query()` oder `SrvP::runScript()`
+- Strukturänderungen in Scripts dokumentieren.
+- Große Datenimporte lieber chunkweise einspielen.
+- Vor `DELETE` oder `EDIT` immer mit `SELECT` prüfen, ob die WHERE-Bedingung korrekt ist.
+- Remote-Scripte nur aus vertrauenswürdigen Quellen ausführen.
+- Nach Schema-Änderungen `schema.json` prüfen.

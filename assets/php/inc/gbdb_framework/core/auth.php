@@ -9,7 +9,7 @@ class Auth {
     private const USER_META_SCHEMA = ["uid", "vorname", "nachname", "telefon", "mobil", "adresse", "gender", "bio", "image"];
 
     /**
-     * Verarbeitet die Funktion db.
+     * Liefert den Namen der Auth-Datenbank.
      * @return string Rückgabewert.
      */
     private static function db(): string {
@@ -17,7 +17,7 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion jwt cookie.
+     * Liefert den Namen des JWT-Cookies.
      * @return string Rückgabewert.
      */
     private static function jwtCookie(): string {
@@ -25,9 +25,19 @@ class Auth {
     }
 
     /**
+     * Startet eine Session, falls noch keine aktiv ist.
+     * @return void Rückgabewert.
+     */
+    private static function session(): void {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+    }
+
+    /**
      * Fügt neue Daten ein.
-     * @param string $table Übergabewert.
-     * @param array $obj Übergabewert.
+     * @param string $table Tabelle.
+     * @param array $obj Daten.
      * @return void Rückgabewert.
      */
     private static function insert(string $table, array $obj): void {
@@ -36,10 +46,10 @@ class Auth {
 
     /**
      * Bearbeitet bestehende Daten.
-     * @param string $table Übergabewert.
-     * @param string $where Übergabewert.
-     * @param string $is Übergabewert.
-     * @param array $obj Übergabewert.
+     * @param string $table Tabelle.
+     * @param string $where Suchfeld.
+     * @param string $is Suchwert.
+     * @param array $obj Daten.
      * @return void Rückgabewert.
      */
     private static function edit(string $table, string $where, string $is, array $obj): void {
@@ -47,8 +57,8 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion redirect.
-     * @param string $file Übergabewert.
+     * Leitet weiter, falls ein Ziel angegeben wurde.
+     * @param string $file Ziel.
      * @return void Rückgabewert.
      */
     private static function redirect(string $file): void {
@@ -60,8 +70,8 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion expired.
-     * @param string $exp Übergabewert.
+     * Prüft, ob ein Ablaufzeitpunkt abgelaufen ist.
+     * @param string $exp Ablaufzeit.
      * @return bool Rückgabewert.
      */
     private static function expired(string $exp): bool {
@@ -69,7 +79,7 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion expires.
+     * Erzeugt einen Ablaufzeitpunkt für normale Tokens.
      * @return string Rückgabewert.
      */
     private static function expires(): string {
@@ -83,17 +93,74 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion bool value.
-     * @param mixed $value Übergabewert.
-     * @return bool Rückgabewert.
+     * Erzeugt einen Ablaufzeitpunkt für 2FA-Codes.
+     * @return string Rückgabewert.
      */
-    private static function boolValue(mixed $value): bool {
-        return $value === true || $value === 1 || $value === "1" || $value === "true";
+    private static function tfaExpires(): string {
+        $minutes = (int)(Vars::AUTH()["tfa_expires_minutes"] ?? 10);
+
+        if ($minutes <= 0) {
+            $minutes = 10;
+        }
+
+        return (string)(time() + ($minutes * 60));
     }
 
     /**
-     * Verarbeitet die Funktion read email html file.
-     * @param string $path_with_file Übergabewert.
+     * Wandelt typische Werte in bool um.
+     * @param mixed $value Wert.
+     * @return bool Rückgabewert.
+     */
+    private static function boolValue(mixed $value): bool {
+        return $value === true || $value === 1 || $value === "1" || $value === "true" || $value === "yes" || $value === "on";
+    }
+
+    /**
+     * Prüft, ob ein Wert wie ein gespeicherter Hash aussieht.
+     * @param string $pass Passwort oder Hash.
+     * @return bool Rückgabewert.
+     */
+    private static function isHash(string $pass): bool {
+        return strlen($pass) == 64 && ctype_xdigit($pass);
+    }
+
+    /**
+     * Normalisiert ein Passwort für Speicherung.
+     * @param string $pass Passwort oder Hash.
+     * @return string Rückgabewert.
+     */
+    private static function passwordValue(string $pass): string {
+        if ($pass == "") {
+            return "";
+        }
+
+        if (self::isHash($pass)) {
+            return $pass;
+        }
+
+        return self::hashPass($pass);
+    }
+
+    /**
+     * Normalisiert ein GBDB-Ergebnis auf den ersten Datensatz.
+     * @param array $data Daten.
+     * @return array Rückgabewert.
+     */
+    private static function firstRow(array $data): array {
+        if (empty($data)) {
+            return [];
+        }
+
+        if (isset($data[0]) && is_array($data[0])) {
+            return $data[0];
+        }
+
+        return $data;
+    }
+
+    /**
+     * Liest eine HTML-Mail-Datei.
+     * @param string $path_with_file Datei.
      * @return string Rückgabewert.
      */
     private static function readEmailHtmlFile(string $path_with_file): string {
@@ -115,13 +182,17 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion get user full.
-     * @param string $uid Übergabewert.
+     * Holt Benutzer- und Meta-Daten zusammen.
+     * @param string $uid Benutzer-ID.
      * @return array Rückgabewert.
      */
     private static function getUserFull(string $uid): array {
-        $user = self::get("users", "uid", $uid)[0] ?? [];
-        $meta = self::get("meta", "uid", $uid)[0] ?? [];
+        if ($uid == "") {
+            return [];
+        }
+
+        $user = self::firstRow(self::get("users", "uid", $uid));
+        $meta = self::firstRow(self::get("meta", "uid", $uid));
 
         if (empty($user)) {
             return [];
@@ -131,10 +202,10 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion replace mail vars.
-     * @param string $content Übergabewert.
-     * @param array $user Übergabewert.
-     * @param array $extra Übergabewert.
+     * Ersetzt Variablen in Mail-Vorlagen.
+     * @param string $content Inhalt.
+     * @param array $user Benutzer.
+     * @param array $extra Zusätzliche Werte.
      * @return string Rückgabewert.
      */
     private static function replaceMailVars(string $content, array $user, array $extra = []): string {
@@ -153,24 +224,24 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion mail.
-     * @param array $mail Übergabewert.
+     * Versendet eine Mail über die Framework-Mailfunktion.
+     * @param array $mail Mail-Daten.
      * @return void Rückgabewert.
      */
     private static function mail(array $mail): void {
         Http::sendMail([
-            "to_name" => $mail["to_name"],
-            "to_email" => $mail["to_email"],
-            "from_name" => Vars::AUTH()["email_config"]["from_name"],
-            "from_email" => Vars::AUTH()["email_config"]["from_email"],
-            "subject" => $mail["subject"],
-            "mail_content" => $mail["mail_content"]
+            "to_name" => $mail["to_name"] ?? "",
+            "to_email" => $mail["to_email"] ?? "",
+            "from_name" => Vars::AUTH()["email_config"]["from_name"] ?? "",
+            "from_email" => Vars::AUTH()["email_config"]["from_email"] ?? "",
+            "subject" => $mail["subject"] ?? "",
+            "mail_content" => $mail["mail_content"] ?? ""
         ]);
     }
 
     /**
-     * Verarbeitet die Funktion send verify mail.
-     * @param string $uid Übergabewert.
+     * Versendet eine Verifizierungs-Mail.
+     * @param string $uid Benutzer-ID.
      * @return void Rückgabewert.
      */
     private static function sendVerifyMail(string $uid): void {
@@ -181,7 +252,7 @@ class Auth {
         }
 
         $token = self::newVerifyToken();
-        $link = Vars::AUTH()["email_config"]["verify_link"] . $token;
+        $link = (Vars::AUTH()["email_config"]["verify_link"] ?? "") . $token;
 
         self::insert("mailv", [
             "uid" => $uid,
@@ -194,15 +265,15 @@ class Auth {
 
         self::mail([
             "to_name" => trim(($user["vorname"] ?? "") . " " . ($user["nachname"] ?? "")),
-            "to_email" => $user["email"],
-            "subject" => Vars::AUTH()["email_config"]["subject_verify"],
+            "to_email" => $user["email"] ?? "",
+            "subject" => Vars::AUTH()["email_config"]["subject_verify"] ?? "E-Mail bestätigen",
             "mail_content" => $content
         ]);
     }
 
     /**
-     * Verarbeitet die Funktion send2 fa mail.
-     * @param string $uid Übergabewert.
+     * Versendet eine 2FA-Mail.
+     * @param string $uid Benutzer-ID.
      * @return void Rückgabewert.
      */
     private static function send2FaMail(string $uid): void {
@@ -212,12 +283,19 @@ class Auth {
             return;
         }
 
+        foreach (self::get("tfa") as $t) {
+            if (($t["uid"] ?? "") == $uid) {
+                self::delete("tfa", "uid", $uid);
+                break;
+            }
+        }
+
         $code = self::new2FaCode();
 
         self::insert("tfa", [
             "uid" => $uid,
             "code" => $code,
-            "exp" => self::expires()
+            "exp" => self::tfaExpires()
         ]);
 
         $content = self::readEmailHtmlFile(Vars::AUTH()["email_config"]["mail_2fa"]);
@@ -225,14 +303,14 @@ class Auth {
 
         self::mail([
             "to_name" => trim(($user["vorname"] ?? "") . " " . ($user["nachname"] ?? "")),
-            "to_email" => $user["email"],
-            "subject" => Vars::AUTH()["email_config"]["subject_2fa"],
+            "to_email" => $user["email"] ?? "",
+            "subject" => Vars::AUTH()["email_config"]["subject_2fa"] ?? "2FA Code",
             "mail_content" => $content
         ]);
     }
 
     /**
-     * Verarbeitet die Funktion new2 fa code.
+     * Erzeugt einen eindeutigen 2FA-Code.
      * @return string Rückgabewert.
      */
     private static function new2FaCode(): string {
@@ -241,6 +319,11 @@ class Auth {
             $code = (string)random_int(100000, 999999);
 
             foreach (self::get("tfa") as $t) {
+                if (self::expired($t["exp"] ?? "")) {
+                    self::delete("tfa", "id", (string)($t["id"] ?? ""));
+                    continue;
+                }
+
                 if (($t["code"] ?? "") == $code) {
                     $retry = true;
                     break;
@@ -252,7 +335,7 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion new verify token.
+     * Erzeugt einen eindeutigen Mail-Verifizierungstoken.
      * @return string Rückgabewert.
      */
     private static function newVerifyToken(): string {
@@ -261,6 +344,11 @@ class Auth {
             $token = bin2hex(random_bytes(32));
 
             foreach (self::get("mailv") as $m) {
+                if (self::expired($m["exp"] ?? "")) {
+                    self::delete("mailv", "id", (string)($m["id"] ?? ""));
+                    continue;
+                }
+
                 if (($m["token"] ?? "") == $token) {
                     $retry = true;
                     break;
@@ -272,8 +360,8 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion new j w t.
-     * @param string $uid Übergabewert.
+     * Erzeugt einen neuen JWT.
+     * @param string $uid Benutzer-ID.
      * @return string Rückgabewert.
      */
     private static function newJWT(string $uid): string {
@@ -283,12 +371,12 @@ class Auth {
 
             foreach (self::get("jwt") as $j) {
                 if (self::expired($j["exp"] ?? "")) {
-                    self::delete("jwt", "id", $j["id"]);
+                    self::delete("jwt", "id", (string)($j["id"] ?? ""));
                     continue;
                 }
 
                 if (($j["uid"] ?? "") == $uid) {
-                    self::delete("jwt", "uid", $j["uid"]);
+                    self::delete("jwt", "uid", $uid);
                     continue;
                 }
 
@@ -309,7 +397,7 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion new u i d.
+     * Erzeugt eine eindeutige Benutzer-ID.
      * @return string Rückgabewert.
      */
     private static function newUID(): string {
@@ -329,12 +417,12 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion is no login file.
+     * Prüft, ob die aktuelle Datei ohne Login erreichbar ist.
      * @return bool Rückgabewert.
      */
     private static function isNoLoginFile(): bool {
-        foreach (Vars::AUTH()["files_no_login"] as $file) {
-            if (str_contains(Vars::this_file(), $file)) {
+        foreach ((Vars::AUTH()["files_no_login"] ?? []) as $file) {
+            if ($file != "" && str_contains(Vars::this_file(), $file)) {
                 return true;
             }
         }
@@ -343,7 +431,7 @@ class Auth {
     }
 
     /**
-     * Verarbeitet Auth-Aktionen.
+     * Prüft die aktuelle lokale Authentifizierung.
      * @return array Rückgabewert.
      */
     private static function auth(): array {
@@ -353,6 +441,7 @@ class Auth {
 
         if (!Cookie::exists(self::jwtCookie())) {
             self::logout();
+            return [];
         }
 
         $jwt = Cookie::get(self::jwtCookie());
@@ -367,10 +456,10 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion double user.
-     * @param string $username Übergabewert.
-     * @param string $email Übergabewert.
-     * @param string $uid Übergabewert.
+     * Prüft auf doppelte Benutzer.
+     * @param string $username Benutzername.
+     * @param string $email E-Mail.
+     * @param string $uid Auszuschließende Benutzer-ID.
      * @return string Rückgabewert.
      */
     private static function doubleUser(string $username, string $email, string $uid = ""): string {
@@ -392,17 +481,17 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion user obj.
-     * @param string $uid Übergabewert.
-     * @param array $user_data Übergabewert.
-     * @param bool $new Übergabewert.
+     * Baut ein Benutzer-Objekt.
+     * @param string $uid Benutzer-ID.
+     * @param array $user_data Benutzerdaten.
+     * @param bool $new Neuer Benutzer.
      * @return array Rückgabewert.
      */
     private static function userObj(string $uid, array $user_data, bool $new = false): array {
         $current = [];
 
         if (!$new) {
-            $current = self::get("users", "uid", $uid)[0] ?? [];
+            $current = self::firstRow(self::get("users", "uid", $uid));
         }
 
         $obj = [
@@ -411,12 +500,12 @@ class Auth {
             "email" => $user_data["email"] ?? ($current["email"] ?? ""),
             "active" => $user_data["active"] ?? ($current["active"] ?? false),
             "rolle" => $user_data["rolle"] ?? ($current["rolle"] ?? "user"),
-            "datum" => $current["datum"] ?? date("d.m.Y"),
+            "datum" => $current["datum"] ?? ($user_data["datum"] ?? date("d.m.Y")),
             "tfa" => $user_data["tfa"] ?? ($current["tfa"] ?? false)
         ];
 
-        if ($new || ($user_data["password"] ?? "") != "") {
-            $obj["password"] = self::hashPass($user_data["password"] ?? "");
+        if ($new || array_key_exists("password", $user_data)) {
+            $obj["password"] = self::passwordValue((string)($user_data["password"] ?? ""));
         } else {
             $obj["password"] = $current["password"] ?? "";
         }
@@ -425,17 +514,17 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion meta obj.
-     * @param string $uid Übergabewert.
-     * @param array $user_meta Übergabewert.
-     * @param bool $new Übergabewert.
+     * Baut ein Meta-Objekt.
+     * @param string $uid Benutzer-ID.
+     * @param array $user_meta Meta-Daten.
+     * @param bool $new Neuer Benutzer.
      * @return array Rückgabewert.
      */
     private static function metaObj(string $uid, array $user_meta, bool $new = false): array {
         $current = [];
 
         if (!$new) {
-            $current = self::get("meta", "uid", $uid)[0] ?? [];
+            $current = self::firstRow(self::get("meta", "uid", $uid));
         }
 
         return [
@@ -452,7 +541,7 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion init tables.
+     * Legt benötigte Tabellen an.
      * @return void Rückgabewert.
      */
     private static function initTables(): void {
@@ -462,24 +551,102 @@ class Auth {
 
         $tables = GBDB::listTables(self::db());
 
-        if (!in_array("users", $tables)) GBDB::createTable(self::db(), "users", self::USER_TABLE_SCHEMA);
-        if (!in_array("jwt", $tables)) GBDB::createTable(self::db(), "jwt", self::JWT_SCHEMA);
-        if (!in_array("mailv", $tables)) GBDB::createTable(self::db(), "mailv", self::MAIL_VERIFY_SCHEMA);
-        if (!in_array("pwf", $tables)) GBDB::createTable(self::db(), "pwf", self::PWF_SCHEMA);
-        if (!in_array("tfa", $tables)) GBDB::createTable(self::db(), "tfa", self::TFA_SCHEMA);
-        if (!in_array("meta", $tables)) GBDB::createTable(self::db(), "meta", self::USER_META_SCHEMA);
-
-        if (empty(self::get("users", "uid", Vars::AUTH()["root_user"]["uid"]))) {
-            self::insert("users", Vars::AUTH()["root_user"]);
+        if (!in_array("users", $tables)) {
+            GBDB::createTable(self::db(), "users", self::USER_TABLE_SCHEMA);
         }
 
-        if (empty(self::get("meta", "uid", Vars::AUTH()["root_user_meta"]["uid"]))) {
-            self::insert("meta", Vars::AUTH()["root_user_meta"]);
+        if (!in_array("jwt", $tables)) {
+            GBDB::createTable(self::db(), "jwt", self::JWT_SCHEMA);
+        }
+
+        if (!in_array("mailv", $tables)) {
+            GBDB::createTable(self::db(), "mailv", self::MAIL_VERIFY_SCHEMA);
+        }
+
+        if (!in_array("pwf", $tables)) {
+            GBDB::createTable(self::db(), "pwf", self::PWF_SCHEMA);
+        }
+
+        if (!in_array("tfa", $tables)) {
+            GBDB::createTable(self::db(), "tfa", self::TFA_SCHEMA);
+        }
+
+        if (!in_array("meta", $tables)) {
+            GBDB::createTable(self::db(), "meta", self::USER_META_SCHEMA);
+        }
+
+        $rootUser = Vars::AUTH()["root_user"] ?? [];
+        $rootMeta = Vars::AUTH()["root_user_meta"] ?? [];
+
+        if (!empty($rootUser["uid"]) && empty(self::get("users", "uid", $rootUser["uid"]))) {
+            self::insert("users", self::userObj($rootUser["uid"], $rootUser, true));
+        }
+
+        if (!empty($rootMeta["uid"]) && empty(self::get("meta", "uid", $rootMeta["uid"]))) {
+            self::insert("meta", self::metaObj($rootMeta["uid"], $rootMeta, true));
         }
     }
 
     /**
-     * Initialisiert die Klasse und legt benötigte Strukturen an.
+     * Prüft Login-Daten zentral für lokalen und remote Login.
+     * @param string $username_or_email Benutzername oder E-Mail.
+     * @param string $plain_text_password Klartext-Passwort.
+     * @param bool $remote Remote-Modus.
+     * @return array Rückgabewert.
+     */
+    private static function loginCore(string $username_or_email, string $plain_text_password, bool $remote = false): array {
+        $err = "Keine Benutzer in der Datenbank";
+
+        foreach (self::get("users") as $u) {
+            $err = "Benutzer nicht gefunden";
+
+            if (($u["username"] ?? "") != $username_or_email && ($u["email"] ?? "") != $username_or_email) {
+                continue;
+            }
+
+            $err = "Passwort falsch";
+
+            if (($u["password"] ?? "") != self::hashPass($plain_text_password)) {
+                continue;
+            }
+
+            $err = "Benutzer deaktiviert oder E-Mail nicht verifiziert";
+
+            if (!self::boolValue($u["active"] ?? false)) {
+                continue;
+            }
+
+            if (self::boolValue($u["tfa"] ?? false)) {
+                self::send2FaMail($u["uid"]);
+
+                return [
+                    "ok" => false,
+                    "tfa" => true,
+                    "uid" => $u["uid"],
+                    "msg" => "2FA Code wurde versendet"
+                ];
+            }
+
+            $jwt = self::newJWT($u["uid"]);
+
+            return [
+                "ok" => true,
+                "tfa" => false,
+                "msg" => "Login erfolgreich",
+                "jwt" => $jwt,
+                "user" => self::getUserFull($u["uid"])
+            ];
+        }
+
+        return [
+            "ok" => false,
+            "tfa" => false,
+            "msg" => $err
+        ];
+    }
+
+    /**
+     * Initialisiert die Klasse und prüft lokale Authentifizierung.
      * @return void Rückgabewert.
      */
     public static function init(): void {
@@ -488,7 +655,7 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion init remote.
+     * Initialisiert Auth ohne lokale Weiterleitung für Remote-Nutzung.
      * @return array Rückgabewert.
      */
     public static function initRemote(): array {
@@ -502,7 +669,7 @@ class Auth {
 
     /**
      * Erzeugt den Framework-Passwort-Hash.
-     * @param string $pass Übergabewert.
+     * @param string $pass Passwort.
      * @return string Rückgabewert.
      */
     public static function hashPass(string $pass): string {
@@ -510,10 +677,10 @@ class Auth {
     }
 
     /**
-     * Liest Daten aus der angegebenen Quelle.
-     * @param string $table Übergabewert.
-     * @param string $where Übergabewert.
-     * @param string $is Übergabewert.
+     * Liest Daten aus der Auth-Datenbank.
+     * @param string $table Tabelle.
+     * @param string $where Suchfeld.
+     * @param string $is Suchwert.
      * @return array Rückgabewert.
      */
     public static function get(string $table, string $where = "", string $is = ""): array {
@@ -525,18 +692,22 @@ class Auth {
     }
 
     /**
-     * Löscht Daten aus der angegebenen Quelle.
-     * @param string $table Übergabewert.
-     * @param string $where Übergabewert.
-     * @param string $is Übergabewert.
+     * Löscht Daten aus der Auth-Datenbank.
+     * @param string $table Tabelle.
+     * @param string $where Suchfeld.
+     * @param string $is Suchwert.
      * @return void Rückgabewert.
      */
     public static function delete(string $table, string $where, string $is): void {
+        if ($is == "") {
+            return;
+        }
+
         GBDB::deleteData(self::db(), $table, $where, $is);
     }
 
     /**
-     * Beendet die aktuelle Anmeldung.
+     * Beendet die aktuelle lokale Anmeldung.
      * @return void Rückgabewert.
      */
     public static function logout(): void {
@@ -547,21 +718,30 @@ class Auth {
             self::delete("jwt", "token", $jwt);
         }
 
-        self::redirect(Vars::AUTH()["logout_file"]);
+        self::redirect(Vars::AUTH()["logout_file"] ?? "");
     }
 
     /**
-     * Prüft Login-Daten und startet die Anmeldung.
-     * @param string $username_or_email Übergabewert.
-     * @param string $plain_text_password Übergabewert.
+     * Prüft Login-Daten und startet die lokale Anmeldung.
+     * @param string $username_or_email Benutzername oder E-Mail.
+     * @param string $plain_text_password Klartext-Passwort.
      * @return string Rückgabewert.
      */
     public static function login(string $username_or_email, string $plain_text_password): string {
-        $result = self::loginRemote($username_or_email, $plain_text_password);
+        $result = self::loginCore($username_or_email, $plain_text_password, false);
+
+        if (($result["tfa"] ?? false) === true) {
+            self::session();
+
+            $_SESSION["auth_tfa_uid"] = $result["uid"];
+            $_SESSION["auth_tfa_time"] = time();
+
+            return $result["msg"];
+        }
 
         if ($result["ok"]) {
             Cookie::set(self::jwtCookie(), $result["jwt"]);
-            self::redirect(Vars::AUTH()["login_file"]);
+            self::redirect(Vars::AUTH()["login_file"] ?? "");
             return "";
         }
 
@@ -569,52 +749,92 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion login remote.
-     * @param string $username_or_email Übergabewert.
-     * @param string $plain_text_password Übergabewert.
+     * Prüft Login-Daten für Remote/API/Srv-Nutzung.
+     * @param string $username_or_email Benutzername oder E-Mail.
+     * @param string $plain_text_password Klartext-Passwort.
      * @return array Rückgabewert.
      */
     public static function loginRemote(string $username_or_email, string $plain_text_password): array {
-        $err = "Keine Benutzer in der Datenbank";
+        return self::loginCore($username_or_email, $plain_text_password, true);
+    }
 
-        foreach (self::get("users") as $u) {
-            $err = "Benutzer nicht gefunden";
+    /**
+     * Schließt einen lokalen 2FA-Login ab.
+     * @param string $code 2FA-Code.
+     * @return string Rückgabewert.
+     */
+    public static function login2Fa(string $code): string {
+        self::session();
 
-            if (($u["username"] ?? "") == $username_or_email || ($u["email"] ?? "") == $username_or_email) {
-                $err = "Passwort falsch";
+        if (!isset($_SESSION["auth_tfa_uid"])) {
+            return "Keine offene 2FA Anmeldung gefunden";
+        }
 
-                if (($u["password"] ?? "") == self::hashPass($plain_text_password)) {
-                    $err = "Benutzer deaktiviert oder E-Mail nicht verifiziert";
+        $uid = $_SESSION["auth_tfa_uid"];
+        $result = self::login2FaRemote($uid, $code);
 
-                    if (self::boolValue($u["active"] ?? false)) {
-                        $jwt = self::newJWT($u["uid"]);
+        if ($result["ok"]) {
+            unset($_SESSION["auth_tfa_uid"]);
+            unset($_SESSION["auth_tfa_time"]);
 
-                        return [
-                            "ok" => true,
-                            "msg" => "Login erfolgreich",
-                            "jwt" => $jwt,
-                            "user" => self::getUserFull($u["uid"])
-                        ];
-                    }
-                }
+            Cookie::set(self::jwtCookie(), $result["jwt"]);
+            self::redirect(Vars::AUTH()["login_file"] ?? "");
+
+            return "";
+        }
+
+        return $result["msg"];
+    }
+
+    /**
+     * Schließt einen Remote/API/Srv-2FA-Login ab.
+     * @param string $uid Benutzer-ID.
+     * @param string $code 2FA-Code.
+     * @return array Rückgabewert.
+     */
+    public static function login2FaRemote(string $uid, string $code): array {
+        foreach (self::get("tfa") as $t) {
+            if (self::expired($t["exp"] ?? "")) {
+                self::delete("tfa", "id", (string)($t["id"] ?? ""));
+                continue;
+            }
+
+            if (($t["uid"] ?? "") == $uid && ($t["code"] ?? "") == $code) {
+                self::delete("tfa", "code", $code);
+
+                $jwt = self::newJWT($uid);
+
+                return [
+                    "ok" => true,
+                    "msg" => "Login erfolgreich",
+                    "jwt" => $jwt,
+                    "user" => self::getUserFull($uid)
+                ];
             }
         }
 
         return [
             "ok" => false,
-            "msg" => $err
+            "msg" => "2FA Code ungültig oder abgelaufen"
         ];
     }
 
     /**
-     * Verarbeitet die Funktion auth by token.
-     * @param string $jwt Übergabewert.
+     * Prüft einen JWT.
+     * @param string $jwt Token.
      * @return array Rückgabewert.
      */
     public static function authByToken(string $jwt): array {
+        if ($jwt == "") {
+            return [
+                "ok" => false,
+                "msg" => "Token fehlt"
+            ];
+        }
+
         foreach (self::get("jwt") as $j) {
             if (self::expired($j["exp"] ?? "")) {
-                self::delete("jwt", "id", $j["id"]);
+                self::delete("jwt", "id", (string)($j["id"] ?? ""));
                 continue;
             }
 
@@ -622,7 +842,10 @@ class Auth {
                 $user = self::getUserFull($j["uid"] ?? "");
 
                 if (empty($user)) {
-                    return ["ok" => false, "msg" => "Benutzer nicht gefunden"];
+                    return [
+                        "ok" => false,
+                        "msg" => "Benutzer nicht gefunden"
+                    ];
                 }
 
                 return [
@@ -639,8 +862,34 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion user.
-     * @param string $uid Übergabewert.
+     * Gibt den aktuell eingeloggten Benutzer zurück.
+     * @return array Rückgabewert.
+     */
+    public static function me(): array {
+        if (!Cookie::exists(self::jwtCookie())) {
+            return [];
+        }
+
+        $check = self::authByToken(Cookie::get(self::jwtCookie()));
+
+        if (!$check["ok"]) {
+            return [];
+        }
+
+        return $check["user"];
+    }
+
+    /**
+     * Prüft, ob lokal ein Benutzer eingeloggt ist.
+     * @return bool Rückgabewert.
+     */
+    public static function check(): bool {
+        return !empty(self::me());
+    }
+
+    /**
+     * Holt einen Benutzer anhand der UID.
+     * @param string $uid Benutzer-ID.
      * @return array Rückgabewert.
      */
     public static function user(string $uid): array {
@@ -648,10 +897,10 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion new user.
-     * @param array $user_data Übergabewert.
-     * @param array $user_meta Übergabewert.
-     * @param bool $is_this_register Übergabewert.
+     * Legt einen neuen Benutzer an.
+     * @param array $user_data Benutzerdaten.
+     * @param array $user_meta Meta-Daten.
+     * @param bool $is_this_register Registrierung.
      * @return string Rückgabewert.
      */
     public static function newUser(array $user_data, array $user_meta, bool $is_this_register = false): string {
@@ -674,14 +923,14 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion edit user.
-     * @param string $uid Übergabewert.
-     * @param array $user_data Übergabewert.
-     * @param array $user_meta Übergabewert.
+     * Bearbeitet einen Benutzer.
+     * @param string $uid Benutzer-ID.
+     * @param array $user_data Benutzerdaten.
+     * @param array $user_meta Meta-Daten.
      * @return string Rückgabewert.
      */
     public static function editUser(string $uid, array $user_data, array $user_meta = []): string {
-        $current = self::get("users", "uid", $uid)[0] ?? [];
+        $current = self::firstRow(self::get("users", "uid", $uid));
 
         if (empty($current)) {
             return "Benutzer nicht gefunden";
@@ -699,15 +948,21 @@ class Auth {
         self::edit("users", "uid", $uid, self::userObj($uid, $user_data));
 
         if (!empty($user_meta)) {
-            self::edit("meta", "uid", $uid, self::metaObj($uid, $user_meta));
+            $meta = self::firstRow(self::get("meta", "uid", $uid));
+
+            if (empty($meta)) {
+                self::insert("meta", self::metaObj($uid, $user_meta, true));
+            } else {
+                self::edit("meta", "uid", $uid, self::metaObj($uid, $user_meta));
+            }
         }
 
         return "";
     }
 
     /**
-     * Verarbeitet die Funktion verify email.
-     * @param string $token Übergabewert.
+     * Verifiziert eine E-Mail-Adresse.
+     * @param string $token Token.
      * @return bool Rückgabewert.
      */
     public static function verifyEmail(string $token): bool {
@@ -715,7 +970,7 @@ class Auth {
 
         foreach (self::get("mailv") as $m) {
             if (self::expired($m["exp"] ?? "")) {
-                self::delete("mailv", "id", $m["id"]);
+                self::delete("mailv", "id", (string)($m["id"] ?? ""));
                 continue;
             }
 
@@ -730,25 +985,23 @@ class Auth {
     }
 
     /**
-     * Verarbeitet die Funktion verify2 fa code.
-     * @param string $code Übergabewert.
+     * Prüft einen 2FA-Code ohne Login-Abschluss.
+     * @param string $code 2FA-Code.
      * @return bool Rückgabewert.
      */
     public static function verify2FaCode(string $code): bool {
-        $ok = false;
-
         foreach (self::get("tfa") as $t) {
             if (self::expired($t["exp"] ?? "")) {
-                self::delete("tfa", "id", $t["id"]);
+                self::delete("tfa", "id", (string)($t["id"] ?? ""));
                 continue;
             }
 
             if (($t["code"] ?? "") == $code) {
                 self::delete("tfa", "code", $code);
-                $ok = true;
+                return true;
             }
         }
 
-        return $ok;
+        return false;
     }
 }

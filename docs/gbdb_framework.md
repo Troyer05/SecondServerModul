@@ -1,163 +1,110 @@
-# GBDB Framework
+# GBDB Framework – Entwicklerhandbuch
 
-## Überblick
+## Ziel des Frameworks
 
-GBDB ist die direkte PHP-Schicht des Frameworks. Sie arbeitet append-basiert auf Dateiebene und bildet die technische Grundlage für GreenQL und das SecondServer Module.
+Das greenbucket® GBDB Framework ist ein leichtgewichtiges PHP-Framework für Projekte, die ohne klassischen SQL-Zwang auskommen sollen, aber trotzdem strukturierte Daten, Authentifizierung, Remote-Kommunikation und Update-/Lizenzlogik benötigen.
 
-Die Kernidee ist:
+Es ist modular aufgebaut: Core-Klassen übernehmen Basisaufgaben, Plugins binden externe Produkte an und das SecondServerModul erlaubt eine Trennung zwischen Frontend-Server und Daten-/Backend-Server.
 
-- Basen = Datenbank-Ordner
-- Tabellen = Dateistrukturen innerhalb einer Base
-- Einträge = Datensätze mit Auto-ID
-- GreenQL = alternative Sprachschicht auf denselben Methoden
+## Bootstrapping
 
-## Typischer Include
+Der normale Einstieg ist:
 
 ```php
-<?php
 include 'assets/php/inc/.config/_config.inc.php';
 ```
 
-## Wichtige Direktmethoden
+Diese Datei lädt:
 
-### Basen
+1. `gbdb.php`
+2. alle Core-Klassen
+3. alle Plugin-Klassen
+4. `Srv.php`
+5. `functions.php`
 
-```php
-GBDB::createDatabase("main");
-GBDB::deleteDatabase("main");
-GBDB::listDBs();
-```
+Dadurch stehen Klassen wie `GBDB`, `GBDBv2`, `GreenQLv2`, `Auth`, `Http`, `SrvP` und die Produkt-Plugins direkt zur Verfügung.
 
-### Tabellen
+## Datenbankarchitektur
 
-```php
-GBDB::createTable("main", "users", ["uid", "name", "email"]);
-GBDB::deleteTable("main", "users");
-GBDB::listTables("main");
-GBDB::getKeys("main", "users");
-GBDB::compactTable("main", "users");
-```
+### GBDB
 
-### Datensätze
+GBDB speichert Daten in JSON-Dateien unter `assets/DB`. Eine Tabelle besteht nicht nur aus einer Datei, sondern aus mehreren technischen Bestandteilen:
 
-```php
-GBDB::insertData("main", "users", [
-    "uid" => "u_1001",
-    "name" => "Markus",
-    "email" => "markus@example.com"
-]);
+- Tabellen-JSON mit Header-Zeile und Datenzeilen.
+- Meta-Datei mit Zähler-/Strukturinformationen.
+- Append-Datei für Schreiboperationen.
+- Lock-Datei für sichere Schreibzugriffe.
+- Schema-Datei zur Dokumentation/Strukturpflege.
 
-GBDB::getData("main", "users");
-GBDB::getData("main", "users", true, "uid", "u_1001");
+### GBDBv2
 
-GBDB::editData("main", "users", "uid", "u_1001", [
-    "name" => "Markus Müller"
-]);
-
-GBDB::deleteData("main", "users", "uid", "u_1001");
-```
-
-## GreenQL aus dem Core heraus
-
-Neben den Direktmethoden gibt es zwei High-Level-Zugänge:
+GBDBv2 ergänzt Instanzen. Eine Instanz ist ein separater Datenraum. Dadurch kann dieselbe Anwendung mehrere Mandanten oder getrennte Projekte verwalten.
 
 ```php
-GBDB::query("PICK * FROM users IN main;");
-GBDB::runScript("scripts/greenql/makeUser.gql", ["uid" => "u_1001"]);
+GBDBv2::setInstance('kunde_a');
+GBDBv2::createDatabase('main');
 ```
 
-### `GBDB::query()`
+## GreenQL
 
-Signatur:
+GreenQL ist eine einfache Sprache, um Datenbankoperationen in Scripten zu schreiben. Das ist nützlich für Migrationen, Seeds, Admin-Oberflächen und Remote-Ausführung.
+
+Beispiel:
+
+```greenql
+ROOT main;
+GROW TABLE users (uid, username, email);
+SEED users WITH uid="u001", username="markus", email="markus@example.test";
+SELECT * FROM users;
+```
+
+## Authentifizierung
+
+`Auth` erzeugt und verwaltet Benutzer, JWT-Cookies, Mail-Verifikation und 2FA-Codes. Die Konfiguration liegt in `Vars::AUTH()`.
+
+Typische Verwendung:
 
 ```php
-GBDB::query(string $script, array $ctx = [], array $params = []): array
+Auth::init();
+$status = Auth::login($username, $password);
+if (Auth::check()) {
+    $user = Auth::me();
+}
 ```
 
-Parameter:
+## SecondServerModul
 
-- `script`: GreenQL-Text
-- `ctx`: Startkontext wie `db` und `table`
-- `params`: Script-Parameter für `param("...")`
+Das SecondServerModul trennt Client und Backend:
 
-### `GBDB::runScript()`
+- Server 1 nutzt `SrvP`.
+- Server 2 stellt `backend.php` und `Srv` bereit.
+- Jeder Request wird mit Static-Key und Einmal-Token abgesichert.
+- Optional kann per Kontext eine GBDBv2-Instanz gewählt werden.
 
-Signatur:
+## UI und Developer Tools
 
-```php
-GBDB::runScript(string $path, array $params = [], array $ctx = []): array
-```
+Das Projekt enthält GreenQL-UIs, CSS/JS-Dateien und Dev-Helfer. Diese sind hilfreich für Entwicklung, sollten aber produktiv nur geschützt erreichbar sein.
 
-Verhalten:
+## Fehlerbehebung
 
-- liest eine `.gql` Datei aus der Projektstruktur
-- führt sie mit derselben Engine wie `GBDB::query()` aus
-- akzeptiert Script-Parameter
-- gibt dieselbe Result-Struktur zurück wie `query()`
+### Leere JSON-Antwort
 
-## Beispiel: User-Script kapseln
+- Prüfen, ob `backend.php` erreichbar ist.
+- Prüfen, ob PHP-Fehler die JSON-Ausgabe zerstören.
+- Webserver-Logs lesen.
 
-### PHP
+### GBDB schreibt nicht
 
-```php
-GBDB::runScript("scripts/greenql/makeUser.gql", [
-    "uid" => $uid,
-    "name" => $name,
-    "username" => $username,
-    "email" => $email,
-    "password" => $password
-]);
-```
+- Rechte für `assets/DB` prüfen.
+- Lock-Dateien und Besitzer prüfen.
+- Kein pauschales `777`, lieber Gruppe/ACL korrekt setzen.
 
-### `.gql`
+### Remote-Auth schlägt fehl
 
-```gql
-# Parameter lesen
-declare _uid = param("uid");
-declare _name = param("name");
-declare _username = param("username");
-declare _email = param("email");
-declare _password = param("password");
+- `srvp_static_key` auf beiden Seiten vergleichen.
+- HTTP/HTTPS in `Vars::srvp_ssl()` prüfen.
+- Token-Datei unter `assets/DB/framework_temp/_srvtkns.cry` prüfen.
 
-SEED users WITH uid=_uid, name=_name, username=_username, email=_email, password=_password IN main;
-```
+## Erweiterung
 
-## Was direkt und was über GreenQL?
-
-### Direktmethoden sind stark, wenn ...
-
-- du exakt in PHP bleiben willst
-- du IDE-Autocomplete magst
-- du sehr gezielt CRUD aufrufst
-
-### GreenQL ist stark, wenn ...
-
-- du mehrere Schritte zusammenfassen willst
-- du Abläufe in Scripts auslagern willst
-- du wiederverwendbare Seeder, Setups oder Admin-Makros bauen willst
-- du dieselbe Sprache lokal und remote verwenden willst
-
-## Empfohlene Struktur für GreenQL-Scripts
-
-```txt
-/scripts
-    /greenql
-        makeUser.gql
-        setupMain.gql
-        resetDemo.gql
-        seedMuseum.gql
-```
-
-## Hinweise zur Datenstruktur
-
-- `id` wird intern als Auto-ID geführt
-- `id` sollte in `WITH` nicht manuell gesetzt werden
-- beim Tabellenumbau sollten nur fachliche Spalten angegeben werden, nicht `id`
-- `compactTable()` bzw. `PACK` sollte nach vielen Änderungen sinnvoll eingesetzt werden
-
-## Best Practice
-
-- Projekt-Setup als `.gql` Script ablegen
-- wiederkehrende Create-/Seed-Abläufe als `runScript()` kapseln
-- komplexe Massenaktionen lieber über GreenQL als über viele einzelne PHP-Aufrufe abbilden
-- fachlich stabile Prozesse in eigene Scriptdateien auslagern
+Neue Klassen gehören in `core/` oder `plugins/`. Neue öffentliche Methoden sollten direkt dokumentiert werden. Neue GBDB-Tabellen sollten Schema- und Seed-Logik bekommen.

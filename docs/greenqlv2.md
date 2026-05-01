@@ -1,9 +1,9 @@
-# ShareSuiteAPI
+# GreenQLv2 – instanzfähige Query Engine
 ## Zweck
-`ShareSuiteAPI` ist die API-Bindung für ShareSuite-Tabellen, Kalender, Blogs, BIB und Tickets.
+`GreenQLv2` ist die instanzfähige GreenQL-Engine. Sie arbeitet mit GBDBv2, unterstützt Instanz-Kontext und eignet sich für Remote-/Multi-Tenant-Verwendung.
 ## Datei und Einbindung
-- Klasse: `ShareSuiteAPI`
-- Datei: `assets/php/inc/gbdb_framework/plugins/sharesuite.php`
+- Klasse: `GreenQLv2`
+- Datei: `assets/php/inc/gbdb_framework/core/greenql_engine_v2.php`
 - Wird normalerweise über `assets/php/inc/gbdb_framework/gbdb.php` oder über `assets/php/inc/.config/_config.inc.php` geladen.
 
 ## Arbeitsweise
@@ -19,33 +19,36 @@ Typische Aufrufkette:
 ## Öffentliche API
 | Methode | Rückgabe | Beschreibung |
 |---|---:|---|
-| `getTable(string $tid, string $id = "")` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `getTableSettings(string $tid)` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `getTableIndex()` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `getCalendar(string $kid, string $id = "")` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `getBib(string $bid = "")` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `getBlogs(string $bid = "")` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `getTickets(string $tid = "")` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `newTableEntry(string $tid, array $data)` | `array` | Kapselt die Fachlogik für `newTableEntry()` innerhalb dieser Klasse. |
-| `newCalendarEntry(string $kid, string $titel, string $von, string $bis, string $text = "")` | `array` | Kapselt die Fachlogik für `newCalendarEntry()` innerhalb dieser Klasse. |
-| `newBlog(string $user, string $user_auth, string $title, string $text)` | `array` | Kapselt die Fachlogik für `newBlog()` innerhalb dieser Klasse. |
-| `editTableEntry(string $tid, string $id, array $data)` | `array` | Aktualisiert vorhandene Daten anhand eines Suchkriteriums. |
-| `editCalendarEntry(string $kid, string $id, string $titel, string $von, string $bis, string $text = "")` | `array` | Aktualisiert vorhandene Daten anhand eines Suchkriteriums. |
-| `editBlog(string $id, string $user, string $user_auth, string $title, string $text)` | `array` | Aktualisiert vorhandene Daten anhand eines Suchkriteriums. |
-| `editBib(string $id, string $name)` | `array` | Aktualisiert vorhandene Daten anhand eines Suchkriteriums. |
-| `editTicket(string $id, string $status, string $reply = "")` | `array` | Aktualisiert vorhandene Daten anhand eines Suchkriteriums. |
-| `deleteTableEntry(string $tid, string $id)` | `array` | Löscht einen Eintrag oder entfernt eine Ressource. |
-| `deleteCalendarEntry(string $kid, string $id)` | `array` | Löscht einen Eintrag oder entfernt eine Ressource. |
-| `deleteBlog(string $id)` | `array` | Löscht einen Eintrag oder entfernt eine Ressource. |
-| `deleteBib(string $id)` | `array` | Löscht einen Eintrag oder entfernt eine Ressource. |
+| `cleanName(string $name)` | `string` | Bereinigt Namen für Datenbanken, Tabellen, Felder und Instanzen. |
+| `unquote(string $value)` | `mixed` | Entfernt Quotes und wandelt einfache Werte um. |
+| `stripComments(string $script)` | `string` | Entfernt Kommentare aus einem Script. |
+| `splitCommands(string $script)` | `array` | Trennt ein Script in einzelne Befehle. |
+| `evaluateValue(string $value, array $vars = [], array $params = [])` | `mixed` | Wertet einen Wert aus. |
+| `resolveNameToken(string $token, array $vars = [])` | `string` | Löst einen Namen aus Token oder Variable auf. |
+| `parseList(string $raw, array $vars = [])` | `array` | Parst eine kommagetrennte Liste. |
+| `parseAssignments(string $raw, array $vars = [], array $params = [])` | `array` | Parst Zuweisungen. |
+| `parseWhere(string $raw, array $vars = [], array $params = [])` | `?array` | Parst WHERE-Bedingungen. |
+| `rowMatch(array $row, ?array $where)` | `bool` | Prüft, ob eine Zeile zur WHERE-Bedingung passt. |
+| `sortRows(array &$rows, ?string $field, string $dir = "ASC")` | `void` | Sortiert Zeilen. |
+| `getRows(string $db, string $table)` | `array` | Holt Tabellenzeilen aus dem aktiven Treiber. |
+| `getTableKeys(string $db, string $table)` | `array` | Holt Tabellenfelder aus dem aktiven Treiber. |
+| `selectRows(string $db, string $table, array $columns = ["*"], ?array $where = null, ?string $sortField = null, string $sortDir = "ASC", ?int $limit = null)` | `array` | Selektiert Tabellenzeilen. |
+| `stats(string $db)` | `array` | Gibt Statistiken zu einer Base zurück. |
+| `command(string $command, array &$ctx = [], array &$vars = [], array $params = [])` | `array` | Führt einen einzelnen GreenQL-Befehl aus. |
+| `run(string $script, array $ctx = [], array $params = [])` | `array` | Führt ein komplettes GreenQL-Script aus. |
 
 ## Beispiele
 ```php
-include 'assets/php/inc/.config/_config.inc.php';
-
-// Beispielaufruf; Parameter bitte passend zum Projekt einsetzen.
-$result = ShareSuiteAPI::getTable("example", "");
-var_dump($result);
+$result = GreenQLv2::run('
+INSTANCE kunde_a;
+ROOT main;
+GROW TABLE users (uid, username, email);
+SEED users WITH uid=$uid, username=$name, email=$mail;
+', [], [
+    'uid' => 'u001',
+    'name' => 'markus',
+    'mail' => 'markus@example.test'
+]);
 ```
 
 ## Fehlerquellen und Debugging
@@ -58,8 +61,9 @@ var_dump($result);
 ## Interne Methoden
 Diese Methoden erklären die interne Struktur. Sie sind nicht als öffentliche API gedacht:
 
-- `private static base() : array` – greenbucket ShareSuite API Anbindung API Doku: https://sharesuite.greenbucket.online/api_doc.php class ShareSuiteAPI { Verarbeitet die Funktion base.
-- `private static fetch(string $method, array $data) : array` – Kapselt die Fachlogik für `fetch()` innerhalb dieser Klasse.
+- `private static db() : string` – Gibt den aktiven Datenbank-Treiber zurück.
+- `private static syncInstance(array $ctx = []) : void` – Synchronisiert den aktiven Treiber anhand des Contextes.
+- `private static useInstance(string $instance, array &$ctx = []) : bool` – Aktiviert eine GBDBv2-Instanz.
 
 ## Best Practices
 - Öffentliche Methoden bevorzugen und interne Dateipfade nicht hart im Anwendungscode duplizieren.

@@ -37,22 +37,102 @@ if (isset($body["do"]) && $body["do"] === "gtoken") {
 general_auth($body, $method);
 test_param(["do"], $body);
 
-$do = $body["do"];
+$do = (string)$body["do"];
+$ctx = DB_CTX_FROM_BODY($body);
+$driver = DB_DRIVER($ctx);
+
+if ($do == "driver") {
+    resp(200, [
+        "driver" => $driver,
+        "instance" => $ctx["instance"] ?? "",
+        "gbdbv2" => class_exists("GBDBv2"),
+        "greenqlv2" => class_exists("GreenQLv2")
+    ]);
+}
+
+if ($do == "instances") {
+    if (!class_exists("GBDBv2")) {
+        resp(400, "GBDBv2 is not available.");
+    }
+
+    resp(200, GBDBv2::listInstances());
+}
+
+if ($do == "create_instance") {
+    test_param(["instance"], $body);
+
+    if (!class_exists("GBDBv2")) {
+        resp(400, "GBDBv2 is not available.");
+    }
+
+    resp(200, ["created" => GBDBv2::createInstance((string)$body["instance"])]);
+}
+
+if ($do == "delete_instance") {
+    test_param(["instance"], $body);
+
+    if (!class_exists("GBDBv2")) {
+        resp(400, "GBDBv2 is not available.");
+    }
+
+    resp(200, [
+        "deleted" => GBDBv2::deleteInstance(
+            (string)$body["instance"],
+            (bool)($body["force"] ?? false)
+        )
+    ]);
+}
+
+if ($do == "bases") {
+    resp(200, $driver::listDBs());
+}
+
+if ($do == "tables") {
+    test_param(["db"], $body);
+    resp(200, $driver::listTables((string)$body["db"]));
+}
+
+if ($do == "create_base") {
+    test_param(["db"], $body);
+    resp(200, ["created" => $driver::createDatabase((string)$body["db"])]);
+}
+
+if ($do == "delete_base") {
+    test_param(["db"], $body);
+    resp(200, ["deleted" => $driver::deleteDatabase((string)$body["db"])]);
+}
+
+if ($do == "create_table") {
+    test_param(["db", "table", "cols"], $body);
+
+    $cols = is_array($body["cols"]) ? $body["cols"] : [];
+    resp(200, ["created" => $driver::createTable((string)$body["db"], (string)$body["table"], $cols)]);
+}
+
+if ($do == "delete_table") {
+    test_param(["db", "table"], $body);
+    resp(200, ["deleted" => $driver::deleteTable((string)$body["db"], (string)$body["table"])]);
+}
+
+if ($do == "keys") {
+    test_param(["db", "table"], $body);
+    resp(200, $driver::getKeys((string)$body["db"], (string)$body["table"]));
+}
 
 if ($do == "get") {
     test_param(["db", "table"], $body);
 
     if (isset($body["where"]) && isset($body["is"])) {
-        resp(200, DB_GET($body["db"], $body["table"], true, $body["where"], $body["is"]));
+        resp(200, DB_GET($body["db"], $body["table"], true, $body["where"], $body["is"], $ctx));
     }
 
-    resp(200, DB_GET($body["db"], $body["table"]));
+    resp(200, DB_GET($body["db"], $body["table"], false, "", "", $ctx));
 }
 
 if ($do == "put") {
     test_param(["db", "table", "data"], $body);
 
-    $id = DB_PUT($body["db"], $body["table"], $body["data"]);
+    $id = DB_PUT($body["db"], $body["table"], $body["data"], $ctx);
 
     if ($id !== false && $id != -1) {
         resp(200, [
@@ -67,14 +147,14 @@ if ($do == "put") {
 if ($do == "delete") {
     test_param(["db", "table", "where", "is"], $body);
 
-    DB_DELETE($body["db"], $body["table"], $body["where"], $body["is"]);
-    resp(200, "Data deleted successfully.");
+    $ok = DB_DELETE($body["db"], $body["table"], $body["where"], $body["is"], $ctx);
+    resp($ok ? 200 : 400, $ok ? "Data deleted successfully." : "Delete failed.");
 }
 
 if ($do == "edit") {
     test_param(["db", "table", "where", "is", "data"], $body);
 
-    $ok = DB_EDIT($body["db"], $body["table"], $body["where"], $body["is"], $body["data"]);
+    $ok = DB_EDIT($body["db"], $body["table"], $body["where"], $body["is"], $body["data"], $ctx);
 
     if ($ok) {
         resp(200, "Data updated successfully.");
@@ -86,7 +166,6 @@ if ($do == "edit") {
 if ($do == "query") {
     test_param(["query"], $body);
 
-    $ctx = isset($body["ctx"]) && is_array($body["ctx"]) ? $body["ctx"] : [];
     $params = isset($body["params"]) && is_array($body["params"]) ? $body["params"] : [];
 
     resp(200, DB_QUERY($body["query"], $ctx, $params));
@@ -95,7 +174,6 @@ if ($do == "query") {
 if ($do == "runscript") {
     test_param(["path"], $body);
 
-    $ctx = isset($body["ctx"]) && is_array($body["ctx"]) ? $body["ctx"] : [];
     $params = isset($body["params"]) && is_array($body["params"]) ? $body["params"] : [];
 
     resp(200, Srv::runScript($body["path"], $params, $ctx));
@@ -110,7 +188,7 @@ if ($do == "srv_enqueue") {
     test_param(["service", "action"], $body);
 
     $payload = $body["payload"] ?? [];
-    $id = Srv::enqueue($body["service"], $body["action"], $payload);
+    $id = Srv::enqueue($body["service"], $body["action"], $payload, $ctx);
 
     resp(200, [
         "job_id" => $id,
@@ -120,15 +198,15 @@ if ($do == "srv_enqueue") {
 
 if ($do == "srv_run_one") {
     test_param(["id"], $body);
-    resp(200, Srv::runOne((int)$body["id"]));
+    resp(200, Srv::runOne((int)$body["id"], $ctx));
 }
 
 if ($do == "srv_status") {
     if (isset($body["id"])) {
-        resp(200, Srv::getJob((int)$body["id"]));
+        resp(200, Srv::getJob((int)$body["id"], $ctx));
     }
 
-    resp(200, Srv::getJobs());
+    resp(200, Srv::getJobs($ctx));
 }
 
 if ($do == "srv_logs") {
@@ -137,7 +215,7 @@ if ($do == "srv_logs") {
 }
 
 if ($do == "srv_jobs") {
-    resp(200, Srv::getJobs());
+    resp(200, Srv::getJobs($ctx));
 }
 
 resp(404, "Unknown backend action: " . $do);

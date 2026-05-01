@@ -1,207 +1,114 @@
-# GBDB Framework v4
+# SecondServerModul / greenbucket® GBDB Framework
 
-GBDB ist dein JSON-/Append-basiertes Framework mit drei Ebenen, die auf derselben Datenbasis arbeiten:
+## Überblick
 
-1. **GBDB Core** für direkte PHP-Methoden
-2. **GreenQL** als eigene Query-/Script-Sprache
-3. **SecondServer Module** für Remote-Zugriffe per API
+Dieses Repository enthält ein vollständiges PHP-Framework rund um die greenbucket® GBDB-Dateidatenbank, GreenQL, Authentifizierung, Remote-Backend-Kommunikation und optionale Produkt-Plugins. Das System ist bewusst ohne große Build-Pipeline gehalten und kann klassisch auf Apache/PHP betrieben werden.
 
-Das Ziel ist nicht SQL nachzubauen, sondern eine eigene, lesbare und schnelle Sprache für dieselbe Datenbasis bereitzustellen.
+Die wichtigsten Bausteine sind:
 
-## Kernideen
-
-- dieselben Daten lokal über `GBDB::*` und remote über `SrvP::*`
-- klassische Direktmethoden **und** GreenQL parallel nutzbar
-- GreenQL für einzelne Queries, Batch-Kommandos und komplette `.gql`-Scripts
-- GreenQL UI mit getrenntem **UI Mode** und **Query Mode**
-- Script-Parameter, Variablen und Kommentare in GreenQL
+- **GBDB** als dateibasierte JSON-Datenbank.
+- **GBDBv2** als instanzfähige Variante für getrennte Mandanten/Projekte.
+- **GreenQL / GreenQLv2** als kleine Script- und Query-Sprache für Datenbankoperationen.
+- **Auth** als Login-, JWT-, Mail-Verifikation- und 2FA-System.
+- **SrvP** als Client-Klasse für Remote-Zugriffe auf einen zweiten Server.
+- **backend.php + Srv** als Empfänger und Ausführer auf dem Backend-Server.
+- **mRootLicense / mRootUpdate** für Lizenz- und Update-Prozesse.
+- **API-Plugins** für ShareSuite, MuseumQR und EventQR.
 
 ## Schnellstart
 
 ```php
-<?php
 include 'assets/php/inc/.config/_config.inc.php';
-```
 
-Danach stehen dir u. a. diese Klassen zur Verfügung:
-
-- `GBDB`
-- `Srv`
-- `SrvP`
-- `Vars`
-- `Http`
-- `Crypt`
-- `Format`
-- `Validate`
-- `Route`
-- `FileTool`
-- `Cache`
-
-## Zwei Wege für dieselbe Datenbasis
-
-### Direkt per PHP
-
-```php
-GBDB::createDatabase("main");
-GBDB::createTable("main", "users", ["uid", "name", "username", "email", "password"]);
-
-GBDB::insertData("main", "users", [
-    "uid" => "u_1001",
-    "name" => "Markus",
-    "username" => "troyer05",
-    "email" => "markus@example.com",
-    "password" => "secret"
+GBDB::createDatabase('main');
+GBDB::createTable('main', 'users', ['uid', 'username', 'email']);
+GBDB::insertData('main', 'users', [
+    'uid' => 'u001',
+    'username' => 'markus',
+    'email' => 'markus@example.test'
 ]);
 
-$rows = GBDB::getData("main", "users");
-$user = GBDB::getData("main", "users", true, "uid", "u_1001");
+$users = GBDB::getData('main', 'users');
 ```
 
-### Über GreenQL
+## Grundstruktur
 
-```php
-GBDB::query("GROW BASE main;");
-GBDB::query("GROW TABLE users (uid, name, username, email, password) IN main;");
-GBDB::query("SEED users WITH uid='u_1001', name='Markus', username='troyer05', email='markus@example.com', password='secret' IN main;");
-
-$result = GBDB::query("PICK * FROM users IN main;");
+```text
+assets/php/inc/.config/_config.inc.php   zentrale Projekt-Einbindung
+assets/php/inc/gbdb_framework/ENV.php    Vars-Konfiguration
+assets/php/inc/gbdb_framework/core/      Core-Klassen
+assets/php/inc/gbdb_framework/plugins/   Produkt-/API-Plugins
+assets/php/inc/Srv.php                   Backend-Service-Modul
+backend.php                              Remote-API-Endpunkt
+functions.php                            Backend-Helfer und Tokenlogik
+docs/                                    ausführliche Entwicklerdokumentation
 ```
 
-## GreenQL als Scriptsprache
+## Installation
 
-### Direktes Query-Running
+1. Repository in den Webroot legen.
+2. PHP mit `openssl`, `json`, `curl` und Schreibrechten für `assets/DB` bereitstellen.
+3. `assets/php/inc/gbdb_framework/ENV.php` prüfen und projektbezogene Werte setzen.
+4. Bei SecondServer-Nutzung `Vars::srvp_ip()`, `Vars::srvp_ssl()` und `Vars::srvp_static_key()` auf beiden Seiten passend setzen.
+5. `assets/php/inc/.config/_config.inc.php` im Anwendungscode einbinden.
+
+## Wichtige Sicherheitsregeln
+
+- `backend.php` nur mit starkem `srvp_static_key` betreiben.
+- Keine produktiven API-Keys oder Lizenzdaten ins öffentliche Repository committen.
+- `assets/DB` nicht öffentlich ausliefern, falls der Webserver Dateilisten oder direkte Downloads erlaubt.
+- Schreibrechte so setzen, dass PHP schreiben kann, aber nicht pauschal alles `777` ist.
+- Update- und Script-Ausführung nur hinter Auth/Admin-UI anbieten.
+
+## Typische Arbeitsabläufe
+
+### Lokale GBDB-Tabelle erstellen
 
 ```php
-$result = GBDB::query("
+GBDB::createDatabase('main');
+GBDB::createTable('main', 'settings', ['key', 'value']);
+GBDB::insertData('main', 'settings', ['key' => 'theme', 'value' => 'dark']);
+```
+
+### Instanz mit GBDBv2 nutzen
+
+```php
+GBDBv2::createInstance('kunde_a');
+GBDBv2::setInstance('kunde_a');
+GBDBv2::createDatabase('main');
+```
+
+### GreenQL ausführen
+
+```php
+$result = GBDB::query('
 ROOT main;
-PICK * FROM users LIMIT 25;
-");
+GROW TABLE settings (key, value);
+SEED settings WITH key="theme", value="dark";
+SELECT * FROM settings;
+');
 ```
 
-### `.gql` Script aus Projektstruktur ausführen
+### Remote über SrvP schreiben
 
 ```php
-$result = GBDB::runScript("scripts/greenql/makeUser.gql", [
-    "name" => $name,
-    "username" => $username,
-    "email" => $email,
-    "password" => $password,
-    "uid" => $uid
-]);
-```
-
-### Remote dasselbe mit SecondServer
-
-```php
-$result = SrvP::query("PICK * FROM users IN main;");
-
-$result = SrvP::runScript("scripts/greenql/makeUser.gql", [
-    "name" => $name,
-    "username" => $username,
-    "email" => $email,
-    "password" => $password,
-    "uid" => $uid
-]);
-```
-
-## GreenQL UI
-
-`greenql_ui.php` ist die Dev-Oberfläche für GreenQL.
-
-### UI Mode
-
-- Basen anlegen/löschen
-- Tabellen anlegen/umbauen/löschen
-- Entries anlegen/bearbeiten/löschen
-- Live-Preview und Schema ansehen
-
-### Query Mode
-
-- GreenQL direkt schreiben und ausführen
-- `.gql` Datei hochladen und sofort ausführen
-- dieselbe Engine wie `GBDB::query()` nutzen
-
-## Neue Script-Features
-
-### Kommentare
-
-```gql
-# Das ist ein Kommentar
-# Ganze Zeilen oder Inline-Kommentare sind möglich
-```
-
-### Variablen
-
-```gql
-declare _status = "Aktiv";
-declare _uid = param("uid");
-```
-
-`declare` und der vom Beispiel bekannte Schreibfehler `decalre` werden beide akzeptiert.
-
-### Parameter
-
-```gql
-declare _name = param("name");
-declare _email = param("email");
-```
-
-### Variablen in Commands
-
-```gql
-declare _base = "main";
-declare _table = "users";
-declare _uid = param("uid");
-
-ROOT _base;
-GROW TABLE _uid (firma, status) IN _base;
-SEED _table WITH uid=_uid, status="Aktiv" IN _base;
-```
-
-Die Engine löst Variablen in Base-/Tabellen-Namen sowie in `WITH`- und `WHERE`-Werten auf.
-
-## Result-Struktur von `GBDB::query()` / `GBDB::runScript()`
-
-```php
-[
-    "ok" => true,
-    "messages" => [
-        ["ok" => true, "text" => "Base erstellt: main"]
-    ],
-    "results" => [
-        [
-            "command" => "PICK * FROM users IN main",
-            "keys" => ["id", "uid", "name"],
-            "rows" => [ ... ]
-        ]
-    ],
-    "keys" => ["id", "uid", "name"],
-    "rows" => [ ... ],
-    "ctx" => [
-        "db" => "main",
-        "table" => "users"
-    ],
-    "vars" => [
-        "_uid" => "u_1001"
-    ],
-    "refresh" => true
-]
+SrvP::setInstance('kunde_a');
+SrvP::createDatabase('main');
+SrvP::createTable('main', 'logs', ['type', 'message']);
+SrvP::insertData('main', 'logs', ['type' => 'info', 'message' => 'remote ready']);
 ```
 
 ## Dokumentation
 
-- `docs/gbdb_framework.md`
-- `docs/second_server_module.md`
-- `docs/gbdb_and_greenql.md`
-- `docs/documentary_greenql_langunge.md`
+Die ausführlichen Einzeldateien liegen im Ordner `docs/`. Besonders relevant:
 
-## Beispielscript im Paket
+- `docs/gbdb.md` für die Dateidatenbank.
+- `docs/greenql.md` und `docs/documentary_greenql_langunge.md` für GreenQL.
+- `docs/srvp.md`, `docs/srv.md` und `docs/second_server_module.md` für Remote-Nutzung.
+- `docs/auth.md` für Benutzer, Login, JWT und 2FA.
+- `docs/classes_index.md` als Klassenübersicht.
+- `docs/gbdbv2.md`, `docs/greenqlv2.md` und `docs/eventqr.md` für ergänzende v2-/API-Module.
 
-- `scripts/greenql/makeUser.gql`
+## Wartung
 
-## Hinweise
-
-- `ERASE` und `RESHAPE` unterstützen aktuell Schreibzugriffe mit `WHERE feld = wert` oder `==`
-- `PICK` unterstützt zusätzlich `!=`, `>`, `<`, `>=`, `<=`, `~=`
-- `PACK` kompaktet eine Tabelle
-- GreenQL ist keine zweite Datenbank, sondern eine zweite Sprache über derselben GBDB-Struktur
+Bei neuen Klassen oder Methoden sollten die passenden `.md`-Dateien im `docs/`-Ordner aktualisiert werden. Bei Änderungen an GBDB-Tabellen gehört auch `schema.json` geprüft. Für Releases sollte das Update-System mit einem echten ZIP-Release und einer Versionsprüfung getestet werden.

@@ -1,6 +1,8 @@
 <?php
 
 /**
+ * @author Markus Müller
+ * 
  * mRoot Anbindung
  * API Doku: 
  */

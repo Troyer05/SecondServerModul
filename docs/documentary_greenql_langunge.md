@@ -1,278 +1,106 @@
-# Documentary: GreenQL Language
+# GreenQL Language – ausführliche Sprachreferenz
 
-## Idee
+## Zweck
 
-GreenQL ist die eigene Query- und Scriptsprache des GBDB Frameworks.
+GreenQL ist eine kleine, menschenlesbare Query- und Script-Sprache für GBDB. Sie ist nicht als SQL-Ersatz für große relationale Datenbanken gedacht, sondern als einfache Sprache für Admin-UIs, Seeds, Migrationen, Remote-Scripte und wiederholbare Datenbankoperationen.
 
-Sie ist bewusst nicht als SQL-Klon gedacht. Die Sprache soll lesbar bleiben, aber direkt auf den GBDB-Core arbeiten.
+## Grundregeln
 
-## Kommandos im Überblick
+- Befehle werden mit Semikolon abgeschlossen.
+- Kommentare können vor der Ausführung entfernt werden.
+- Namen werden bereinigt, damit keine gefährlichen Pfade entstehen.
+- Strings können in Anführungszeichen geschrieben werden.
+- Parameter können aus einem PHP-Array übergeben werden.
 
-### Kontext
+## Typischer Aufbau
 
-#### `ROOT`
+```greenql
+ROOT main;
+GROW TABLE users (uid, username, email);
+SEED users WITH uid="u001", username="markus", email="markus@example.test";
+SELECT * FROM users;
+```
 
-```gql
+## Instanzen mit GreenQLv2
+
+```greenql
+INSTANCE kunde_a;
+ROOT main;
+SELECT * FROM users;
+```
+
+`INSTANCE` wählt bei GBDBv2 den Mandanten/Datenraum. Ohne Instanz wird der normale GBDB-Kontext genutzt.
+
+## Wichtige Befehle
+
+### ROOT
+
+Wählt die aktive Base/Datenbank.
+
+```greenql
 ROOT main;
 ```
 
-Setzt die aktive Base.
+### GROW TABLE
 
-#### `BRANCH`
+Legt eine Tabelle mit Spalten an.
 
-```gql
-BRANCH users;
+```greenql
+GROW TABLE users (uid, username, email, role);
 ```
 
-Setzt die aktive Tabelle.
+### SEED
 
-### Anzeigen
+Fügt einen Datensatz ein.
 
-#### `SHOW BASES`
-
-```gql
-SHOW BASES;
+```greenql
+SEED users WITH uid="u001", username="markus", role="admin";
 ```
 
-Listet alle Basen.
+### SELECT
 
-#### `SHOW TABLES`
+Liest Datensätze.
 
-```gql
-SHOW TABLES;
-SHOW TABLES IN main;
+```greenql
+SELECT * FROM users;
+SELECT uid, username FROM users WHERE role="admin";
 ```
 
-Listet Tabellen der aktiven oder angegebenen Base.
+### EDIT
 
-#### `DESCRIBE`
+Ändert Datensätze anhand einer Bedingung.
 
-```gql
-DESCRIBE users;
-DESCRIBE users IN main;
+```greenql
+EDIT users SET role="dev" WHERE uid="u001";
 ```
 
-Zeigt die Struktur einer Tabelle.
+### DELETE
 
-#### `PEEK`
+Löscht Datensätze anhand einer Bedingung.
 
-```gql
-PEEK users;
-PEEK users IN main LIMIT 20;
+```greenql
+DELETE FROM users WHERE uid="u001";
 ```
 
-Schnelle Vorschau einer Tabelle.
+### PARAMETER
 
-#### `PICK`
-
-```gql
-PICK * FROM users;
-PICK uid, name FROM users IN main;
-PICK * FROM users IN main WHERE role = 'admin';
-PICK * FROM users IN main WHERE name ~= 'mar';
-PICK * FROM users IN main SORT id DESC LIMIT 25;
-```
-
-`PICK` ist die flexible Abfrage.
-
-Unterstützte Operatoren in `WHERE`:
-
-- `=`
-- `==`
-- `!=`
-- `>`
-- `<`
-- `>=`
-- `<=`
-- `~=`
-
-### Struktur
-
-#### `GROW BASE`
-
-```gql
-GROW BASE main;
-```
-
-Erstellt eine Base.
-
-#### `DROP BASE`
-
-```gql
-DROP BASE main;
-```
-
-Löscht eine Base, wenn sie leer ist.
-
-#### `GROW TABLE`
-
-```gql
-GROW TABLE users (uid, name, email) IN main;
-```
-
-Erstellt eine Tabelle.
-
-#### `DROP TABLE`
-
-```gql
-DROP TABLE users IN main;
-```
-
-Löscht eine Tabelle.
-
-#### `PACK`
-
-```gql
-PACK users IN main;
-```
-
-Kompaktiert eine Tabelle.
-
-### Daten
-
-#### `SEED`
-
-```gql
-SEED users WITH uid='u_1001', name='Markus', email='markus@example.com' IN main;
-```
-
-Legt einen Datensatz an.
-
-#### `RESHAPE`
-
-```gql
-RESHAPE users WITH role='editor' WHERE id = 1 IN main;
-```
-
-Ändert Datensätze.
-
-Aktuell für Schreibzugriffe nur mit `WHERE feld = wert` oder `==`.
-
-#### `ERASE`
-
-```gql
-ERASE FROM users WHERE id = 1 IN main;
-```
-
-Löscht Datensätze.
-
-Aktuell für Schreibzugriffe nur mit `WHERE feld = wert` oder `==`.
-
-## Kommentare
-
-```gql
-# Kommentarzeile
-SEED users WITH name="Markus" IN main; # Inline-Kommentar
-```
-
-Zusätzlich werden auch `//`-Inline-Kommentare außerhalb von Strings ignoriert.
-
-## Variablen
-
-### Syntax
-
-```gql
-declare _name = "Markus";
-declare _uid = param("uid");
-```
-
-Der aus deinem Beispiel bekannte Schreibfehler wird auch toleriert:
-
-```gql
-decalre _name = "Markus";
-```
-
-### Parameternutzung
-
-```gql
-declare _name = param("name");
-declare _email = param("email");
-```
-
-Die Parameter werden beim Aufruf übergeben:
+Parameter werden nicht direkt aus dem Script gelesen, sondern über das PHP-Array an `run()` übergeben.
 
 ```php
-GBDB::runScript("scripts/greenql/makeUser.gql", [
-    "name" => $name,
-    "email" => $email
+GreenQLv2::run('SEED users WITH uid=$uid, username=$username;', [], [
+    'uid' => 'u001',
+    'username' => 'markus'
 ]);
 ```
 
-### Wo Variablen eingesetzt werden können
+## Rückgaben
 
-```gql
-declare _base = "main";
-declare _table = "users";
-declare _state = "Aktiv";
+GreenQL gibt ein Array mit Ergebnissen der einzelnen Befehle zurück. Bei UI- oder API-Nutzung sollte nicht blind nur das letzte Element verwendet werden, sondern geprüft werden, welcher Befehl welches Ergebnis geliefert hat.
 
-ROOT _base;
-GROW TABLE _table (uid, name, status) IN _base;
-SEED _table WITH status=_state IN _base;
-```
+## Empfehlungen
 
-Variablen funktionieren aktuell in:
-
-- Base-Namen
-- Tabellennamen
-- Spaltenlisten, wenn das Token als Variablenname vorliegt
-- `WITH`-Werten
-- `WHERE`-Werten
-- `SORT`-Feldern
-
-## Beispielscript
-
-```gql
-# Parameter empfangen
-declare _name = param("name");
-declare _username = param("username");
-declare _email = param("email");
-declare _password = param("password");
-declare _uid = param("uid");
-
-declare _state = "Aktiv";
-
-SEED users WITH uid=_uid, name=_name, username=_username, email=_email, password=_password IN main;
-GROW TABLE _uid (firma, status) IN main;
-GROW BASE _state;
-
-declare _state = "Inaktiv";
-GROW BASE _state;
-```
-
-## Ausführungsmöglichkeiten
-
-### In PHP direkt
-
-```php
-GBDB::query("PICK * FROM users IN main;");
-```
-
-### Aus Datei
-
-```php
-GBDB::runScript("scripts/greenql/makeUser.gql", ["uid" => "u_1001"]);
-```
-
-### Remote
-
-```php
-SrvP::query("PICK * FROM users IN main;");
-SrvP::runScript("scripts/greenql/makeUser.gql", ["uid" => "u_1001"]);
-```
-
-### In der UI
-
-- Query im Query Mode einfügen
-- oder `.gql` Datei im Query Mode hochladen und ausführen
-
-## Rückgabewerte
-
-Jede Query bzw. jedes Script liefert:
-
-- Status `ok`
-- Meldungen `messages`
-- Resultsets `results`
-- letztes Tabellenresultat in `keys` und `rows`
-- Kontext `ctx`
-- Variablenzustand `vars`
-- `refresh`, wenn sich Struktur oder Daten verändert haben
+- Für Seeds jeden Datensatz als eigenen `SEED` schreiben. Das ist besser lesbar und einfacher zu debuggen.
+- Vor produktiven Migrationen Backup erstellen.
+- In Remote-Scripten keine Secrets hardcoden.
+- Tabellen- und Spaltennamen kurz, eindeutig und ASCII-kompatibel halten.
+- Bei GBDBv2 immer bewusst `INSTANCE` setzen, wenn die Query mandantenbezogen ist.

@@ -1,6 +1,8 @@
 <?php
 
 /**
+ * @author Markus Müller
+ * 
  * MuseumQR API Anbindung
  * API Dokumentation: https://museumqr.de/api_doc.html
  */

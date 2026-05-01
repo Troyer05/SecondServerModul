@@ -1,0 +1,27 @@
+{
+    "greenqluiv2system": {
+        "system": {
+            "users": {
+                "uid": "",
+                "username": "",
+                "password": "",
+                "role": "",
+                "created_at": "",
+                "last_login": "",
+                "active": "1",
+                "instances": "*",
+                "bases": "*"
+            }
+        }
+    },
+    "test": {
+        "main": {
+            "kunden": {
+                "knr": "",
+                "name": "",
+                "email": "",
+                "notiz": ""
+            }
+        }
+    }
+}

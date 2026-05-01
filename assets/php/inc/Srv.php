@@ -2,39 +2,128 @@
 
 class Srv {
     /**
+     * Liefert den aktiven DB-Treiber für optionale GBDBv2-Kontexte.
+     * @param array $ctx Übergabewert.
+     * @return string Rückgabewert.
+     */
+    private static function driver(array $ctx = []): string {
+        if (function_exists("DB_DRIVER")) {
+            return DB_DRIVER($ctx);
+        }
+
+        if (!empty($ctx["instance"]) && class_exists("GBDBv2")) {
+            GBDBv2::setInstance((string)$ctx["instance"]);
+            return "GBDBv2";
+        }
+
+        return "GBDB";
+    }
+
+    /**
+     * Stellt die SRV Tabellen sicher.
+     * @param array $ctx Übergabewert.
+     * @return void Rückgabewert.
+     */
+    private static function ensureTables(array $ctx = []): void {
+        $driver = self::driver($ctx);
+
+        if (!in_array("main", $driver::listDBs(), true)) {
+            $driver::createDatabase("main");
+        }
+
+        if (!in_array("srv_jobs", $driver::listTables("main"), true)) {
+            $driver::createTable("main", "srv_jobs", [
+                "service",
+                "action",
+                "payload",
+                "status",
+                "created",
+                "started_at",
+                "finished_at",
+                "error_msg"
+            ]);
+        }
+    }
+
+    /**
+     * Normalisiert einen Script-Pfad relativ zum Projekt-Root des Backends.
+     * @param string $path Übergabewert.
+     * @return string Rückgabewert.
+     */
+    private static function scriptPath(string $path): string {
+        $path = trim($path);
+        $path = str_replace("\\", "/", $path);
+        $path = preg_replace('#/+#', '/', $path) ?? $path;
+
+        if ($path === "") {
+            return "";
+        }
+
+        if (preg_match('#(^|/)\.\.(/|$)#', $path)) {
+            return "";
+        }
+
+        if (is_file($path)) {
+            return $path;
+        }
+
+        $root = dirname(__DIR__, 3);
+        $candidate = $root . "/" . ltrim($path, "/");
+
+        if (is_file($candidate)) {
+            return $candidate;
+        }
+
+        return $candidate;
+    }
+
+    /**
      * Verarbeitet die Funktion enqueue.
      * @param string $service Übergabewert.
      * @param string $action Übergabewert.
      * @param array $payload Übergabewert.
+     * @param array $ctx Übergabewert.
      * @return mixed Rückgabewert.
      */
-    public static function enqueue(string $service, string $action, array $payload = []) {
+    public static function enqueue(string $service, string $action, array $payload = [], array $ctx = []) {
+        self::ensureTables($ctx);
+        $driver = self::driver($ctx);
+
         $job = [
             "service" => $service,
             "action" => $action,
             "payload" => json_encode($payload, JSON_UNESCAPED_UNICODE),
             "status" => "pending",
-            "created" => date("Y-m-d H:i:s")
+            "created" => date("Y-m-d H:i:s"),
+            "started_at" => "",
+            "finished_at" => "",
+            "error_msg" => ""
         ];
 
-        return GBDB::insertData("main", "srv_jobs", $job);
+        return $driver::insertData("main", "srv_jobs", $job);
     }
 
     /**
      * Verarbeitet die Funktion get jobs.
+     * @param array $ctx Übergabewert.
      * @return mixed Rückgabewert.
      */
-    public static function getJobs() {
-        return GBDB::getData("main", "srv_jobs");
+    public static function getJobs(array $ctx = []) {
+        self::ensureTables($ctx);
+        $driver = self::driver($ctx);
+        return $driver::getData("main", "srv_jobs");
     }
 
     /**
      * Verarbeitet die Funktion get job.
      * @param int $id Übergabewert.
+     * @param array $ctx Übergabewert.
      * @return mixed Rückgabewert.
      */
-    public static function getJob(int $id) {
-        $job = GBDB::getData("main", "srv_jobs", true, "id", (string)$id);
+    public static function getJob(int $id, array $ctx = []) {
+        self::ensureTables($ctx);
+        $driver = self::driver($ctx);
+        $job = $driver::getData("main", "srv_jobs", true, "id", (string)$id);
 
         return $job[0] ?? $job;
     }
@@ -47,23 +136,23 @@ class Srv {
      * @return array Rückgabewert.
      */
     public static function runScript(string $path, array $params = [], array $ctx = []): array {
-        $path = ltrim(str_replace(["..", "\\"], ["", "/"], $path), "/");
+        $file = self::scriptPath($path);
 
-        if (!is_file($path)) {
+        if ($file === "" || !is_file($file)) {
             return [
                 "ok" => false,
                 "msg" => "Script not found on backend: " . $path
             ];
         }
 
-        if (!is_readable($path)) {
+        if (!is_readable($file)) {
             return [
                 "ok" => false,
                 "msg" => "Script not readable on backend: " . $path
             ];
         }
 
-        $script = file_get_contents($path);
+        $script = file_get_contents($file);
 
         if ($script === false) {
             return [
@@ -74,6 +163,7 @@ class Srv {
 
         return [
             "ok" => true,
+            "path" => $file,
             "result" => DB_QUERY($script, $ctx, $params)
         ];
     }
@@ -94,8 +184,23 @@ class Srv {
                 return Auth::loginRemote($body["username_or_email"] ?? "", $body["plain_text_password"] ?? "");
             }
 
+            if ($action == "login_2fa") {
+                return Auth::login2FaRemote($body["uid"] ?? "", $body["code"] ?? "");
+            }
+
             if ($action == "token") {
                 return Auth::authByToken($body["jwt"] ?? "");
+            }
+
+            if ($action == "me") {
+                $jwt = $body["jwt"] ?? "";
+                $auth = $jwt !== "" ? Auth::authByToken($jwt) : [];
+
+                if (empty($auth["ok"])) {
+                    return ["ok" => false, "msg" => "Not authenticated"];
+                }
+
+                return ["ok" => true, "user" => Auth::user((string)($auth["uid"] ?? ""))];
             }
 
             if ($action == "get") {
@@ -160,6 +265,19 @@ class Srv {
                 ];
             }
 
+            if ($action == "logout") {
+                $jwt = $body["jwt"] ?? "";
+
+                if ($jwt !== "") {
+                    Auth::delete("jwt", "token", $jwt);
+                }
+
+                return [
+                    "ok" => true,
+                    "msg" => "Logged out"
+                ];
+            }
+
             if ($action == "verify_email") {
                 return [
                     "ok" => Auth::verifyEmail($body["token"] ?? "")
@@ -187,10 +305,13 @@ class Srv {
     /**
      * Verarbeitet die Funktion run one.
      * @param int $id Übergabewert.
+     * @param array $ctx Übergabewert.
      * @return array Rückgabewert.
      */
-    public static function runOne(int $id): array {
-        $job = self::getJob($id);
+    public static function runOne(int $id, array $ctx = []): array {
+        self::ensureTables($ctx);
+        $driver = self::driver($ctx);
+        $job = self::getJob($id, $ctx);
 
         if (!$job || !isset($job["service"])) {
             return ["error" => "Job not found"];
@@ -201,6 +322,11 @@ class Srv {
         $payload = json_decode($job["payload"] ?? "[]", true) ?: [];
 
         self::log($id, "info", "Run job #$id: service=$service action=$action");
+
+        $driver::editData("main", "srv_jobs", "id", (string)$id, [
+            "status" => "running",
+            "started_at" => date("Y-m-d H:i:s")
+        ]);
 
         $module = self::loadModule($service);
 
@@ -221,7 +347,7 @@ class Srv {
 
             self::log($id, "success", "Job #$id erfolgreich beendet", $result);
 
-            GBDB::editData("main", "srv_jobs", "id", (string)$id, [
+            $driver::editData("main", "srv_jobs", "id", (string)$id, [
                 "status" => "done",
                 "finished_at" => date("Y-m-d H:i:s")
             ]);
@@ -230,7 +356,7 @@ class Srv {
         } catch (Throwable $e) {
             self::log($id, "error", "Exception: " . $e->getMessage(), $e->getTraceAsString());
 
-            GBDB::editData("main", "srv_jobs", "id", (string)$id, [
+            $driver::editData("main", "srv_jobs", "id", (string)$id, [
                 "status" => "failed",
                 "error_msg" => $e->getMessage(),
                 "finished_at" => date("Y-m-d H:i:s")
@@ -246,6 +372,7 @@ class Srv {
      * @return mixed Rückgabewert.
      */
     public static function loadModule(string $service) {
+        $service = preg_replace('/[^a-zA-Z0-9_\-]/', '', $service) ?? '';
         $file = __DIR__ . "/../srv_modules/" . ucfirst($service) . ".php";
         $class = "Srv_" . ucfirst($service);
 
