@@ -11,6 +11,16 @@ class Vars {
         "version" => "1.0",
     ];
 
+    private const PUBLIC_API = [
+        "need_auth" => true,
+        "gbdb_access" => true,
+        "gbdb_write_permission" => true,
+        "greenql_access" => true,
+        "auth_keys" => [
+            "dev_key_01"
+        ]
+    ];
+
     private const MROOT = [
         "url"          => "https://mamueller.de/mroot/api.php",
         "license_form" => "lizenz.php",
@@ -190,6 +200,34 @@ class Vars {
      */
     public static function app_version(): string {
         return self::APP["version"];
+    }
+
+    /**
+     * Verarbeitet die Funktion PAPI
+     * @return bool
+     */
+    public static function pApi_need_auth(): bool {
+        return self::PUBLIC_API["need_auth"];
+    }
+
+    /**
+     * Verarbeitet die Funktion PAPI
+     * @return array
+     */
+    public static function pApi_auth_keys(): array {
+        return self::PUBLIC_API["auth_keys"];
+    }
+
+    public static function pApi_access_gbdb(): bool {
+        return self::PUBLIC_API["gbdb_access"];
+    }
+
+    public static function pApi_write_gbdb(): bool {
+        return self::PUBLIC_API["gbdb_write_permission"];
+    }
+
+    public static function pApi_greenql(): bool {
+        return self::PUBLIC_API["greenql_access"];
     }
 
     /**
@@ -548,5 +586,9 @@ class Vars {
      */
     public static function jpretty(): int {
         return self::json_pretty() ? JSON_PRETTY_PRINT : 0;
+    }
+
+    public static function framework_version(): string {
+        return "v8.0";
     }
 }
