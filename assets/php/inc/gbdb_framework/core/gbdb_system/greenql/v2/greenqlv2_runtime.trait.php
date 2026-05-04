@@ -77,6 +77,134 @@ trait GreenQLv2_RuntimeTrait {
 
 
     /**
+     * Konvertiert Funktionsargumente mit vollständiger Runtime-Schachtellogik.
+     * @param string $raw Argument-String.
+     * @param array $ctx Context.
+     * @param array $vars Variablen.
+     * @param array $params Parameter.
+     * @return array Werte.
+     */
+    private static function evalRuntimeArgs(string $raw, array &$ctx, array &$vars, array $params = []): array {
+        $out = [];
+        foreach (self::splitArguments($raw) as $arg) {
+            $out[] = self::evalRuntimeExpression($arg, $ctx, $vars, $params);
+        }
+        return $out;
+    }
+
+
+    /**
+     * Prüft, ob ein Ausdruck komplett von einer äußeren Klammer umschlossen ist.
+     * @param string $value Ausdruck.
+     * @return bool Ergebnis.
+     */
+    private static function runtimeWrappedByOuterParens(string $value): bool {
+        $value = trim($value);
+        if (strlen($value) < 2 || $value[0] !== '(' || substr($value, -1) !== ')') return false;
+
+        $quote = '';
+        $depth = 0;
+        $len = strlen($value);
+
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $value[$i];
+
+            if ($quote !== '') {
+                if ($ch === '\\') {
+                    $i++;
+                    continue;
+                }
+                if ($ch === $quote) $quote = '';
+                continue;
+            }
+
+            if ($ch === '"' || $ch === "'") {
+                $quote = $ch;
+                continue;
+            }
+
+            if ($ch === '(') $depth++;
+            if ($ch === ')') $depth--;
+
+            if ($depth === 0 && $i < $len - 1) return false;
+        }
+
+        return $depth === 0;
+    }
+
+
+    /**
+     * Parst Array-/Objekt-Literale mit vollständiger Runtime-Auswertung der Werte.
+     * @param string $value Ausdruck.
+     * @param array $ctx Context.
+     * @param array $vars Variablen.
+     * @param array $params Parameter.
+     * @return mixed Wert oder null.
+     */
+    private static function parseRuntimeLiteral(string $value, array &$ctx, array &$vars, array $params = []): mixed {
+        $value = trim($value);
+        if ($value === '') return '';
+
+        if ($value[0] === '[' && substr($value, -1) === ']') {
+            $inner = trim(substr($value, 1, -1));
+            if ($inner === '') return [];
+
+            $assoc = self::findTopLevel($inner, ':') >= 0;
+            $out = [];
+
+            foreach (self::splitNested($inner) as $part) {
+                if ($assoc) {
+                    $pos = self::findTopLevel($part, ':');
+                    if ($pos < 0) continue;
+                    $key = (string)self::unquote(trim(substr($part, 0, $pos)));
+                    $out[$key] = self::evalRuntimeExpression(substr($part, $pos + 1), $ctx, $vars, $params);
+                } else {
+                    $out[] = self::evalRuntimeExpression($part, $ctx, $vars, $params);
+                }
+            }
+
+            return $out;
+        }
+
+        if ($value[0] === '{' && substr($value, -1) === '}') {
+            $inner = trim(substr($value, 1, -1));
+            if ($inner === '') return [];
+
+            $parts = self::splitNested($inner);
+            $allBracketObjects = !empty($parts);
+
+            foreach ($parts as $part) {
+                $part = trim($part);
+                if (!($part !== '' && $part[0] === '[' && substr($part, -1) === ']')) {
+                    $allBracketObjects = false;
+                    break;
+                }
+            }
+
+            if ($allBracketObjects) {
+                $out = [];
+                foreach ($parts as $part) {
+                    $out[] = self::parseRuntimeLiteral($part, $ctx, $vars, $params);
+                }
+                return $out;
+            }
+
+            $out = [];
+            foreach ($parts as $part) {
+                $pos = self::findTopLevel($part, ':');
+                if ($pos < 0) continue;
+                $key = (string)self::unquote(trim(substr($part, 0, $pos)));
+                $out[$key] = self::evalRuntimeExpression(substr($part, $pos + 1), $ctx, $vars, $params);
+            }
+
+            return $out;
+        }
+
+        return null;
+    }
+
+
+    /**
      * Ermittelt Instance/Base/Table aus Funktionsargumenten oder aktivem Context.
      * @param array $args Argumente.
      * @param array $ctx Context.
@@ -337,8 +465,116 @@ trait GreenQLv2_RuntimeTrait {
     private static function evalRuntimeExpression(string $value, array &$ctx, array &$vars, array $params = []): mixed {
         $value = trim($value);
 
+        if ($value === '') return '';
+
+        while (self::runtimeWrappedByOuterParens($value)) {
+            $value = trim(substr($value, 1, -1));
+        }
+
+        if (preg_match('/^CALL\s+([a-zA-Z_][a-zA-Z0-9_]*)\/([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/is', $value, $m)) {
+            $res = self::command('CLASS ' . $m[1] . '/' . $m[2] . '(' . $m[3] . ')', $ctx, $vars, $params);
+            if (!($res['ok'] ?? false)) return null;
+            return $res['back'] ?? ($res['result'] ?? null);
+        }
+
+        if (preg_match('/^CALL\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/is', $value, $m)) {
+            $res = self::command('CALL ' . $m[1] . '(' . $m[2] . ')', $ctx, $vars, $params);
+            if (!($res['ok'] ?? false)) return null;
+            return $res['back'] ?? ($res['result'] ?? null);
+        }
+
+        if (preg_match('/^CLASS\s+([a-zA-Z_][a-zA-Z0-9_]*)\/([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/is', $value, $m)) {
+            $res = self::command($value, $ctx, $vars, $params);
+            if (!($res['ok'] ?? false)) return null;
+            return $res['back'] ?? ($res['result'] ?? null);
+        }
+
+        if (preg_match('/^CALL\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/is', $value, $m)) {
+            $res = self::command($value, $ctx, $vars, $params);
+            if (!($res['ok'] ?? false)) return null;
+            return $res['back'] ?? ($res['result'] ?? null);
+        }
+
+        foreach (['||', 'OR'] as $op) {
+            $pos = self::findTopLevel($value, $op);
+            if ($pos >= 0) {
+                $left = self::evalRuntimeExpression(substr($value, 0, $pos), $ctx, $vars, $params);
+                if ((bool)$left) return true;
+                return (bool)self::evalRuntimeExpression(substr($value, $pos + strlen($op)), $ctx, $vars, $params);
+            }
+        }
+
+        foreach (['&&', 'AND'] as $op) {
+            $pos = self::findTopLevel($value, $op);
+            if ($pos >= 0) {
+                $left = self::evalRuntimeExpression(substr($value, 0, $pos), $ctx, $vars, $params);
+                if (!(bool)$left) return false;
+                return (bool)self::evalRuntimeExpression(substr($value, $pos + strlen($op)), $ctx, $vars, $params);
+            }
+        }
+
+        if (preg_match('/^!\s*(.+)$/s', $value, $m)) {
+            return !((bool)self::evalRuntimeExpression((string)$m[1], $ctx, $vars, $params));
+        }
+
+        foreach (['==', '!=', '>=', '<=', '>', '<'] as $op) {
+            $pos = self::findTopLevel($value, $op);
+            if ($pos >= 0) {
+                $left = self::evalRuntimeExpression(substr($value, 0, $pos), $ctx, $vars, $params);
+                $right = self::evalRuntimeExpression(substr($value, $pos + strlen($op)), $ctx, $vars, $params);
+                return match ($op) {
+                    '==' => $left == $right,
+                    '!=' => $left != $right,
+                    '>=' => $left >= $right,
+                    '<=' => $left <= $right,
+                    '>' => $left > $right,
+                    '<' => $left < $right,
+                    default => false
+                };
+            }
+        }
+
+        foreach (['+', '-', '*', '/', '%'] as $op) {
+            $pos = self::findMathOperator($value, $op);
+            if ($pos >= 0) {
+                $left = self::evalRuntimeExpression(substr($value, 0, $pos), $ctx, $vars, $params);
+                $right = self::evalRuntimeExpression(substr($value, $pos + 1), $ctx, $vars, $params);
+
+                if (!is_numeric($left) || !is_numeric($right)) {
+                    if ($op === '+') return (string)$left . (string)$right;
+                    return 0;
+                }
+
+                return match ($op) {
+                    '+' => $left + $right,
+                    '-' => $left - $right,
+                    '*' => $left * $right,
+                    '/' => (float)$right == 0.0 ? 0 : $left / $right,
+                    '%' => (int)$right === 0 ? 0 : (int)$left % (int)$right,
+                    default => 0
+                };
+            }
+        }
+
+        $literal = self::parseRuntimeLiteral($value, $ctx, $vars, $params);
+        if ($literal !== null) {
+            return $literal;
+        }
+
         if (preg_match('/^EXISTS\s+(INSTANCE|BASE|TABLE|DATA)\s+(.+)$/is', $value, $m)) {
             return self::existsRuntime(strtoupper((string)$m[1]), trim((string)$m[2]), $ctx, $vars, $params);
+        }
+
+        if (preg_match('/^CALL\s+([a-zA-Z_][a-zA-Z0-9_]*)\/([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/is', $value, $m)) {
+            $res = self::command('CLASS ' . $m[1] . '/' . $m[2] . '(' . $m[3] . ')', $ctx, $vars, $params);
+            if (!($res['ok'] ?? false)) return null;
+            return $res['back'] ?? ($res['result'] ?? null);
+        }
+
+        if (preg_match('/^CLASS\s+([a-zA-Z_][a-zA-Z0-9_]*)\/([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/is', $value, $m)) {
+            $res = self::command($value, $ctx, $vars, $params);
+            if (!($res['ok'] ?? false)) return null;
+            return $res['back'] ?? ($res['result'] ?? null);
         }
 
         if (preg_match('/^FILE\.RUN\s+(.+?)(?:\s+(\{.*\}|\[.*\]))?$/is', $value, $m)) {
@@ -365,7 +601,13 @@ trait GreenQLv2_RuntimeTrait {
         }
 
         $fn = strtolower((string)$m[1]);
-        $args = self::evalArgs((string)$m[2], $vars, $params);
+        $args = self::evalRuntimeArgs((string)$m[2], $ctx, $vars, $params);
+
+        if (isset($ctx['functions'][$fn]) && is_array($ctx['functions'][$fn])) {
+            $res = self::command('CALL ' . $fn . '(' . (string)$m[2] . ')', $ctx, $vars, $params);
+            if (!($res['ok'] ?? false)) return null;
+            return $res['back'] ?? ($res['result'] ?? null);
+        }
 
         if (in_array($fn, ['uni_random', 'spark_id', 'fresh_id'], true)) {
             return bin2hex(random_bytes(16)) . dechex((int)(microtime(true) * 1000000));
@@ -672,7 +914,6 @@ trait GreenQLv2_RuntimeTrait {
 
         return self::evaluateExpression($value, $vars, $params);
     }
-
 
     /**
      * Prüft EXISTS-Ausdrücke.

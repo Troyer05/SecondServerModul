@@ -788,6 +788,17 @@ class GreenQLUIv2Helper {
     }
 
     /**
+     * Prüft, ob ein Script zwingend eine GBDBv2-Instanz braucht.
+     * Reine Runtime-Scripte mit F/CALL/OUTPUT/BACK dürfen ohne Instanz laufen.
+     * @param string $script Übergabewert.
+     * @return bool Rückgabewert.
+     */
+    private static function scriptRequiresInstance(string $script): bool {
+        $pattern = '/(?:\b(?:USE\s+INSTANCE|ROOT\s+INSTANCE|GROW\s+INSTANCE|DROP\s+INSTANCE|SHOW\s+INSTANCES|ROOT|BRANCH|SHOW\s+BASES|SHOW\s+TABLES|GROW\s+BASE|DROP\s+BASE|GROW\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE|DESCRIBE|PACK|PEEK|PICK|SEED|RESHAPE|ERASE)\b|\bEXISTS\s+(?:BASE|TABLE|DATA)\b|\b(?:base_exists|table_exists|data_exists|get_bases|bases|get_tables|tables|get_data|fetch_data|fetch|monitor|recover|page|cursor)\s*\()/i';
+        return preg_match($pattern, $script) === 1;
+    }
+
+    /**
      * prüft ob ein script vom aktuellen user ausgeführt werden darf.
      * @param string $script Übergabewert.
      * @param string $instance Übergabewert.
@@ -798,7 +809,11 @@ class GreenQLUIv2Helper {
             return ["ok" => false, "message" => "Dieses Script enthält reservierte Systemnamen und wurde blockiert."];
         }
 
-        if (!self::canAccessInstance($instance)) {
+        if ($instance === "") {
+            if (self::scriptRequiresInstance($script)) {
+                return ["ok" => false, "message" => "Bitte wähle eine Instanz aus oder nutze USE INSTANCE <name>; im Script."];
+            }
+        } elseif (!self::canAccessInstance($instance)) {
             return ["ok" => false, "message" => "Du hast keinen Zugriff auf diese Instanz."];
         }
 
@@ -913,8 +928,12 @@ class GreenQLUIv2Helper {
             return self::errorResult((string)$allowed["message"]);
         }
 
-        GBDBv2::setInstance($instance);
-        $result = GreenQLv2::run($script, ["instance" => $instance], $params);
+        if ($instance !== "") {
+            GBDBv2::setInstance($instance);
+        }
+
+        $ctx = $instance !== "" ? ["instance" => $instance] : [];
+        $result = GreenQLv2::run($script, $ctx, $params);
         return self::filterResult($result);
     }
 

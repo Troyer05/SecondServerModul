@@ -29,6 +29,106 @@ trait GreenQL_ExecutionTrait {
         return $expr;
     }
 
+
+    /**
+     * Parst IF-Blöcke mit verschachtelten Klammern und optionalem ELSE.
+     * @param string $command GreenQL-Befehl.
+     * @return array|null [condition, ifBody, elseBody] oder null.
+     */
+    private static function parseIfCommand(string $command): ?array {
+        $command = trim($command);
+        if (!preg_match('/^IF\s*\(/i', $command)) return null;
+
+        $len = strlen($command);
+        $pos = stripos($command, '(');
+        if ($pos === false) return null;
+
+        $quote = '';
+        $depth = 0;
+        $condEnd = -1;
+
+        for ($i = $pos; $i < $len; $i++) {
+            $ch = $command[$i];
+
+            if ($quote !== '') {
+                if ($ch === '\\') {
+                    $i++;
+                    continue;
+                }
+                if ($ch === $quote) $quote = '';
+                continue;
+            }
+
+            if ($ch === '"' || $ch === "'") {
+                $quote = $ch;
+                continue;
+            }
+
+            if ($ch === '(') $depth++;
+            if ($ch === ')') {
+                $depth--;
+                if ($depth === 0) {
+                    $condEnd = $i;
+                    break;
+                }
+            }
+        }
+
+        if ($condEnd < 0) return null;
+
+        $condition = trim(substr($command, $pos + 1, $condEnd - $pos - 1));
+        $rest = ltrim(substr($command, $condEnd + 1));
+        if ($rest === '' || $rest[0] !== '{') return null;
+
+        $readBlock = function (string $raw): array {
+            $len = strlen($raw);
+            $quote = '';
+            $depth = 0;
+
+            for ($i = 0; $i < $len; $i++) {
+                $ch = $raw[$i];
+
+                if ($quote !== '') {
+                    if ($ch === '\\') {
+                        $i++;
+                        continue;
+                    }
+                    if ($ch === $quote) $quote = '';
+                    continue;
+                }
+
+                if ($ch === '"' || $ch === "'") {
+                    $quote = $ch;
+                    continue;
+                }
+
+                if ($ch === '{') $depth++;
+                if ($ch === '}') {
+                    $depth--;
+                    if ($depth === 0) {
+                        return [substr($raw, 1, $i - 1), ltrim(substr($raw, $i + 1))];
+                    }
+                }
+            }
+
+            return ['', $raw];
+        };
+
+        [$ifBody, $afterIf] = $readBlock($rest);
+        $elseBody = '';
+
+        if (preg_match('/^ELSE\b/is', $afterIf)) {
+            $afterElse = ltrim(preg_replace('/^ELSE\b/is', '', $afterIf, 1));
+            if ($afterElse !== '' && $afterElse[0] === '{') {
+                [$elseBody] = $readBlock($afterElse);
+            } elseif (preg_match('/^IF\s*\(/i', $afterElse)) {
+                $elseBody = $afterElse;
+            }
+        }
+
+        return [$condition, $ifBody, $elseBody];
+    }
+
     /**
      * Führt einen Script-Block aus.
      * @param string $script Übergabewert.
@@ -323,7 +423,7 @@ trait GreenQL_ExecutionTrait {
             $argTokens = self::splitArguments((string)$m[3]);
 
             foreach (($method['args'] ?? []) as $i => $argName) {
-                $localVars[$argName] = array_key_exists($i, $argTokens) ? self::evaluateValue((string)$argTokens[$i], $vars, $params) : null;
+                $localVars[$argName] = array_key_exists($i, $argTokens) ? self::evalRuntimeExpression((string)$argTokens[$i], $ctx, $vars, $params) : null;
             }
 
             $body = (string)($method['body'] ?? '');
@@ -368,9 +468,11 @@ trait GreenQL_ExecutionTrait {
             ];
         }
 
-        if (preg_match('/^IF\s*\((.*?)\)\s*\{(.*?)\}(?:\s*ELSE\s*\{(.*)\})?$/is', $command, $m)) {
-            $ok = (bool)self::evalRuntimeExpression((string)$m[1], $ctx, $vars, $params);
-            $body = $ok ? (string)$m[2] : (string)($m[3] ?? '');
+        $ifParts = self::parseIfCommand($command);
+        if ($ifParts !== null) {
+            [$condition, $ifBody, $elseBody] = $ifParts;
+            $ok = (bool)self::evalRuntimeExpression($condition, $ctx, $vars, $params);
+            $body = $ok ? $ifBody : $elseBody;
 
             if (trim($body) === '') {
                 return [
@@ -387,23 +489,6 @@ trait GreenQL_ExecutionTrait {
             return $res;
         }
 
-        if (preg_match('/^IF\s*\((.*)\)\s*\{(.*)\}$/is', $command, $m)) {
-            $ok = (bool)self::evalRuntimeExpression((string)$m[1], $ctx, $vars, $params);
-
-            if (!$ok) {
-                return [
-                    'ok' => true,
-                    'message' => 'IF übersprungen.',
-                    'ctx' => $ctx
-                ];
-            }
-
-            $res = self::runBlock((string)$m[2], $ctx, $vars, $params);
-            if (!empty($res['ok'])) {
-                $res['message'] = 'IF ausgeführt.';
-            }
-            return $res;
-        }
 
         if (preg_match('/^FOR\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*;\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*\{(.*)\}$/is', $command, $m)) {
             $itemVar = self::cleanName((string)$m[1]);
@@ -620,7 +705,7 @@ trait GreenQL_ExecutionTrait {
 
             foreach ($fnArgs as $i => $argName) {
                 $localVars[$argName] = array_key_exists($i, $argTokens)
-                    ? self::evaluateValue((string)$argTokens[$i], $vars, $params)
+                    ? self::evalRuntimeExpression((string)$argTokens[$i], $ctx, $vars, $params)
                     : null;
             }
 
@@ -1914,12 +1999,109 @@ trait GreenQL_ExecutionTrait {
 
 
     /**
+     * Sammelt Ausgabe- und Tabellenresultate auch aus verschachtelten Blöcken.
+     * @param array $result Ergebnis eines Befehls.
+     * @param string $command Ursprünglicher Befehl.
+     * @param array $outputs Ausgabe-Stream.
+     * @param array $results Ergebnisliste.
+     * @param array $lastKeys Letzte Tabellenschlüssel.
+     * @param array $lastRows Letzte Tabellenzeilen.
+     * @return void
+     */
+    private static function collectResultArtifacts(array $result, string $command, array &$outputs, array &$results, array &$lastKeys, array &$lastRows): void {
+        if (isset($result["keys"], $result["rows"])) {
+            $isOutput = (string)($result["message"] ?? "") === "OUTPUT" || (count((array)$result["keys"]) === 1 && ((array)$result["keys"])[0] === "output");
+
+            if ($isOutput) {
+                foreach ((array)$result["rows"] as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+
+                    $outputs[] = [
+                        "command" => $command,
+                        "value" => $row["output"] ?? ""
+                    ];
+                }
+            } else {
+                $lastKeys = $result["keys"];
+                $lastRows = $result["rows"];
+            }
+
+            $results[] = [
+                "command" => $command,
+                "keys" => $result["keys"],
+                "rows" => $result["rows"],
+                "type" => $isOutput ? "output" : "table"
+            ];
+        }
+
+        if (isset($result["results"]) && is_array($result["results"])) {
+            foreach ($result["results"] as $nested) {
+                if (!is_array($nested)) {
+                    continue;
+                }
+
+                $nestedCommand = (string)($nested["command"] ?? $command);
+                self::collectResultArtifacts($nested, $nestedCommand, $outputs, $results, $lastKeys, $lastRows);
+            }
+        }
+    }
+
+    /**
      * Führt ein komplettes GreenQL-Script aus.
      * @param string $script Übergabewert.
      * @param array $ctx Übergabewert.
      * @param array $params Übergabewert.
      * @return array Rückgabewert.
      */
+    /**
+     * Sammelt Tabellen- und OUTPUT-Resultate rekursiv aus verschachtelten Blöcken.
+     * @param array $result Ausführungsergebnis.
+     * @param string $command Ursprungskommando.
+     * @param array $results Sammelarray für Resultate.
+     * @param array $outputs Sammelarray für Outputs.
+     * @param array $lastKeys Letzte Tabellenkeys.
+     * @param array $lastRows Letzte Tabellenrows.
+     * @return void
+     */
+    private static function collectResultStreams(array $result, string $command, array &$results, array &$outputs, array &$lastKeys, array &$lastRows): void {
+        if (isset($result["keys"], $result["rows"])) {
+            $isOutput = (string)($result["message"] ?? "") === "OUTPUT" || (count((array)$result["keys"]) === 1 && ((array)$result["keys"])[0] === "output");
+
+            if ($isOutput) {
+                foreach ((array)$result["rows"] as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+
+                    $outputs[] = [
+                        "command" => (string)($result["command"] ?? $command),
+                        "value" => $row["output"] ?? ""
+                    ];
+                }
+            } else {
+                $lastKeys = (array)$result["keys"];
+                $lastRows = (array)$result["rows"];
+            }
+
+            $results[] = [
+                "command" => (string)($result["command"] ?? $command),
+                "keys" => $result["keys"],
+                "rows" => $result["rows"],
+                "type" => $isOutput ? "output" : "table"
+            ];
+        }
+
+        if (!empty($result["results"]) && is_array($result["results"])) {
+            foreach ($result["results"] as $child) {
+                if (is_array($child)) {
+                    self::collectResultStreams($child, (string)($child["command"] ?? $command), $results, $outputs, $lastKeys, $lastRows);
+                }
+            }
+        }
+    }
+
     public static function run(string $script, array $ctx = [], array $params = []): array {
         self::syncInstance($ctx);
 
@@ -1951,32 +2133,7 @@ trait GreenQL_ExecutionTrait {
                 ];
             }
 
-            if (isset($result["keys"], $result["rows"])) {
-                $isOutput = (string)($result["message"] ?? "") === "OUTPUT" || (count((array)$result["keys"]) === 1 && ((array)$result["keys"])[0] === "output");
-
-                if ($isOutput) {
-                    foreach ((array)$result["rows"] as $row) {
-                        if (!is_array($row)) {
-                            continue;
-                        }
-
-                        $outputs[] = [
-                            "command" => $command,
-                            "value" => $row["output"] ?? ""
-                        ];
-                    }
-                } else {
-                    $lastKeys = $result["keys"];
-                    $lastRows = $result["rows"];
-                }
-
-                $results[] = [
-                    "command" => $command,
-                    "keys" => $result["keys"],
-                    "rows" => $result["rows"],
-                    "type" => $isOutput ? "output" : "table"
-                ];
-            }
+            self::collectResultStreams($result, $command, $results, $outputs, $lastKeys, $lastRows);
 
             if (!empty($result["refresh"])) {
                 $refresh = true;
