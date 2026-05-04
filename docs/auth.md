@@ -1,148 +1,131 @@
 # Auth
+
 ## Zweck
-`Auth` ist das zentrale Benutzer-, Login-, JWT-, E-Mail-Verifikations- und 2FA-Modul. Es verwaltet Userdaten in der konfigurierten Auth-GBDB, erzeugt Tokens, prüft Sessions/Cookies und stellt zusätzlich Remote-Login-Funktionen für das SecondServerModul bereit.
-## Datei und Einbindung
-- Klasse: `Auth`
-- Datei: `assets/php/inc/gbdb_framework/core/auth.php`
-- Wird normalerweise über `assets/php/inc/gbdb_framework/gbdb.php` oder über `assets/php/inc/.config/_config.inc.php` geladen.
 
-## Wichtige Konfiguration
-Benötigt `Vars::AUTH()` mit `main_db`, Token-Laufzeiten, Cookie-Name, Root-User und optional 2FA/Verify-Vorgaben. Die Auth-Tabellen werden bei `Auth::init()` erstellt.
+Authentifizierung, JWT-Cookies, Login, 2FA, Mail-Verifizierung und Userverwaltung über GBDB.
 
-## Konstanten
-| Konstante | Zweck / Wert |
-|---|---|
-| `USER_TABLE_SCHEMA` | `["uid", "username", "email", "password", "active", "rolle", "datum", "tfa"]` |
-| `JWT_SCHEMA` | `["uid", "token", "exp"]` |
-| `MAIL_VERIFY_SCHEMA` | `["uid", "token", "exp"]` |
-| `PWF_SCHEMA` | `["uid", "token", "exp"]` |
-| `TFA_SCHEMA` | `["uid", "code", "exp"]` |
-| `USER_META_SCHEMA` | `["uid", "vorname", "nachname", "telefon", "mobil", "adresse", "gender", "bio", "image"]` |
+## Hintergrund und Intention
 
-## Arbeitsweise
-Die Klasse wird überwiegend statisch genutzt. Öffentliche Methoden sind die stabile API für Projektcode. Private/protected Methoden sind interne Bausteine und sollten nicht direkt aus Anwendungen heraus verwendet werden.
+Die Klasse ist bewusst als statische Utility-/Serviceklasse aufgebaut. Dadurch kann sie nach dem zentralen Framework-Include ohne Dependency-Injection oder Objektinitialisierung verwendet werden. Das passt zum Coding-Stil dieses Frameworks: kurze Aufrufe, klare Dateistruktur, einfache Erweiterbarkeit und möglichst wenig Boilerplate.
 
-Typische Aufrufkette:
+## Einbindung
 
-1. Framework-Konfiguration laden.
-2. Optional benötigte Initialisierung ausführen.
-3. Öffentliche Methode der Klasse nutzen.
-4. Rückgabewert auf Fehler/Leere prüfen.
-
-## Öffentliche API
-| Methode | Rückgabe | Beschreibung |
-|---|---:|---|
-| `init()` | `void` | Initialisiert die Klasse und prüft lokale Authentifizierung. |
-| `initRemote()` | `array` | Initialisiert Auth ohne lokale Weiterleitung für Remote-Nutzung. |
-| `hashPass(string $pass)` | `string` | Erzeugt den Framework-Passwort-Hash. |
-| `get(string $table, string $where = "", string $is = "")` | `array` | Liest Daten aus der Auth-Datenbank. |
-| `delete(string $table, string $where, string $is)` | `void` | Löscht Daten aus der Auth-Datenbank. |
-| `logout()` | `void` | Beendet die aktuelle lokale Anmeldung. |
-| `login(string $username_or_email, string $plain_text_password)` | `string` | Prüft Login-Daten und startet die lokale Anmeldung. |
-| `loginRemote(string $username_or_email, string $plain_text_password)` | `array` | Prüft Login-Daten für Remote/API/Srv-Nutzung. |
-| `login2Fa(string $code)` | `string` | Schließt einen lokalen 2FA-Login ab. |
-| `login2FaRemote(string $uid, string $code)` | `array` | Schließt einen Remote/API/Srv-2FA-Login ab. |
-| `authByToken(string $jwt)` | `array` | Prüft einen JWT. |
-| `me()` | `array` | Gibt den aktuell eingeloggten Benutzer zurück. |
-| `check()` | `bool` | Prüft, ob lokal ein Benutzer eingeloggt ist. |
-| `user(string $uid)` | `array` | Holt einen Benutzer anhand der UID. |
-| `newUser(array $user_data, array $user_meta, bool $is_this_register = false)` | `string` | Legt einen neuen Benutzer an. |
-| `editUser(string $uid, array $user_data, array $user_meta = [])` | `string` | Bearbeitet einen Benutzer. |
-| `verifyEmail(string $token)` | `bool` | Verifiziert eine E-Mail-Adresse. |
-| `verify2FaCode(string $code)` | `bool` | Prüft einen 2FA-Code ohne Login-Abschluss. |
-
-## Beispiele
 ```php
-include 'assets/php/inc/.config/_config.inc.php';
+require_once __DIR__ . "/assets/php/inc/.config/_config.inc.php";
+```
 
+Danach steht `Auth` zur Verfügung.
+
+## Typisches Beispiel
+
+```php
 Auth::init();
 
-$status = Auth::login('admin', 'admin');
 if (Auth::check()) {
     $me = Auth::me();
 }
 
-// Remote über SecondServer:
-$remote = Auth::loginRemote('admin', 'admin');
+$msg = Auth::login("admin", "admin");
 ```
 
-## Fehlerquellen und Debugging
-- Prüfe zuerst, ob `_config.inc.php` korrekt geladen wurde.
-- Bei leeren Rückgaben immer zwischen `false`, leerem Array und nicht vorhandenem Datensatz unterscheiden.
-- Bei Datei- oder GBDB-Zugriffen Schreibrechte des Webservers prüfen.
-- Bei Remote-Aufrufen Netzwerk, URL, Auth-Key und JSON-Antwort kontrollieren.
-- In Entwicklung `Vars::__DEV__()` bzw. eigene Logs nutzen, aber produktive Secrets nie ausgeben.
+## Öffentliche Methoden
 
-## Interne Methoden
-Diese Methoden erklären die interne Struktur. Sie sind nicht als öffentliche API gedacht:
+|Methode|Rückgabe|Beschreibung|
+|---|---|---|
+|`init()`|void|öffentliche Methode der Klasse|
+|`initRemote()`|array|öffentliche Methode der Klasse|
+|`hashPass(string $pass)`|string|öffentliche Methode der Klasse|
+|`get(string $table, string $where = "", string $is = "")`|array|öffentliche Methode der Klasse|
+|`delete(string $table, string $where, string $is)`|void|öffentliche Methode der Klasse|
+|`logout()`|void|öffentliche Methode der Klasse|
+|`login(string $username_or_email, string $plain_text_password)`|string|öffentliche Methode der Klasse|
+|`loginRemote(string $username_or_email, string $plain_text_password)`|array|öffentliche Methode der Klasse|
+|`login2Fa(string $code)`|string|öffentliche Methode der Klasse|
+|`login2FaRemote(string $uid, string $code)`|array|öffentliche Methode der Klasse|
+|`authByToken(string $jwt)`|array|öffentliche Methode der Klasse|
+|`me()`|array|öffentliche Methode der Klasse|
+|`check()`|bool|öffentliche Methode der Klasse|
+|`user(string $uid)`|array|öffentliche Methode der Klasse|
+|`newUser(array $user_data, array $user_meta, bool $is_this_register = false)`|string|öffentliche Methode der Klasse|
+|`editUser(string $uid, array $user_data, array $user_meta = [])`|string|öffentliche Methode der Klasse|
+|`verifyEmail(string $token)`|bool|öffentliche Methode der Klasse|
+|`verify2FaCode(string $code)`|bool|öffentliche Methode der Klasse|
 
-- `private static db() : string` – Liefert den Namen der Auth-Datenbank.
-- `private static jwtCookie() : string` – Liefert den Namen des JWT-Cookies.
-- `private static session() : void` – Startet eine Session, falls noch keine aktiv ist.
-- `private static insert(string $table, array $obj) : void` – Fügt neue Daten ein.
-- `private static edit(string $table, string $where, string $is, array $obj) : void` – Bearbeitet bestehende Daten.
-- `private static redirect(string $file) : void` – Leitet weiter, falls ein Ziel angegeben wurde.
-- `private static expired(string $exp) : bool` – Prüft, ob ein Ablaufzeitpunkt abgelaufen ist.
-- `private static expires() : string` – Erzeugt einen Ablaufzeitpunkt für normale Tokens.
-- `private static tfaExpires() : string` – Erzeugt einen Ablaufzeitpunkt für 2FA-Codes.
-- `private static boolValue(mixed $value) : bool` – Wandelt typische Werte in bool um.
-- `private static isHash(string $pass) : bool` – Prüft, ob ein Wert wie ein gespeicherter Hash aussieht.
-- `private static passwordValue(string $pass) : string` – Normalisiert ein Passwort für Speicherung.
-- `private static firstRow(array $data) : array` – Normalisiert ein GBDB-Ergebnis auf den ersten Datensatz.
-- `private static readEmailHtmlFile(string $path_with_file) : string` – Liest eine HTML-Mail-Datei.
-- `private static getUserFull(string $uid) : array` – Holt Benutzer- und Meta-Daten zusammen.
-- `private static replaceMailVars(string $content, array $user, array $extra = []) : string` – Ersetzt Variablen in Mail-Vorlagen.
-- `private static mail(array $mail) : void` – Versendet eine Mail über die Framework-Mailfunktion.
-- `private static sendVerifyMail(string $uid) : void` – Versendet eine Verifizierungs-Mail.
-- `private static send2FaMail(string $uid) : void` – Versendet eine 2FA-Mail.
-- `private static new2FaCode() : string` – Erzeugt einen eindeutigen 2FA-Code.
-- `private static newVerifyToken() : string` – Erzeugt einen eindeutigen Mail-Verifizierungstoken.
-- `private static newJWT(string $uid) : string` – Erzeugt einen neuen JWT.
-- `private static newUID() : string` – Erzeugt eine eindeutige Benutzer-ID.
-- `private static isNoLoginFile() : bool` – Prüft, ob die aktuelle Datei ohne Login erreichbar ist.
-- `private static auth() : array` – Prüft die aktuelle lokale Authentifizierung.
-- `private static doubleUser(string $username, string $email, string $uid = "") : string` – Prüft auf doppelte Benutzer.
-- `private static userObj(string $uid, array $user_data, bool $new = false) : array` – Baut ein Benutzer-Objekt.
-- `private static metaObj(string $uid, array $user_meta, bool $new = false) : array` – Baut ein Meta-Objekt.
-- `private static initTables() : void` – Legt benötigte Tabellen an.
-- `private static loginCore(string $username_or_email, string $plain_text_password, bool $remote = false) : array` – Prüft Login-Daten zentral für lokalen und remote Login.
+## Interne Hilfsmethoden
 
-## Best Practices
-- Öffentliche Methoden bevorzugen und interne Dateipfade nicht hart im Anwendungscode duplizieren.
-- Rückgaben immer validieren, bevor sie in HTML, API-Antworten oder weitere DB-Operationen fließen.
-- Für neue Features erst Schema/Tabellen sauber anlegen und danach Daten schreiben.
-- Für produktive Systeme Backups, Schreibrechte und Authentifizierung vor dem Rollout testen.
+|Hilfsmethode|Sichtbarkeit|
+|---|---|
+|`db()`|private|
+|`jwtCookie()`|private|
+|`session()`|private|
+|`insert(string $table, array $obj)`|private|
+|`edit(string $table, string $where, string $is, array $obj)`|private|
+|`redirect(string $file)`|private|
+|`expired(string $exp)`|private|
+|`expires()`|private|
+|`tfaExpires()`|private|
+|`boolValue(mixed $value)`|private|
+|`isHash(string $pass)`|private|
+|`passwordValue(string $pass)`|private|
+|`firstRow(array $data)`|private|
+|`readEmailHtmlFile(string $path_with_file)`|private|
+|`getUserFull(string $uid)`|private|
+|`replaceMailVars(string $content, array $user, array $extra = [])`|private|
+|`mail(array $mail)`|private|
+|`sendVerifyMail(string $uid)`|private|
+|`send2FaMail(string $uid)`|private|
+|`new2FaCode()`|private|
+|`newVerifyToken()`|private|
+|`newJWT(string $uid)`|private|
+|`newUID()`|private|
+|`isNoLoginFile()`|private|
+|`auth()`|private|
+|`doubleUser(string $username, string $email, string $uid = "")`|private|
+|`userObj(string $uid, array $user_data, bool $new = false)`|private|
+|`metaObj(string $uid, array $user_meta, bool $new = false)`|private|
+|`initTables()`|private|
+|`loginCore(string $username_or_email, string $plain_text_password, bool $remote = false)`|private|
 
-## Zusatzhinweise
-Passwörter werden mit `Auth::hashPass()` gespeichert. Bestehende Projekte sollten nicht verschiedene Hash-Funktionen mischen. Für produktive Systeme wären PHP `password_hash()`/`password_verify()` langfristig sicherer, falls Kompatibilität angepasst werden darf.
+## Konstanten
 
-## Integration in eigene Projekte
+|Sichtbarkeit|Konstante|
+|---|---|
+|private|`USER_TABLE_SCHEMA`|
+|private|`JWT_SCHEMA`|
+|private|`MAIL_VERIFY_SCHEMA`|
+|private|`PWF_SCHEMA`|
+|private|`TFA_SCHEMA`|
+|private|`USER_META_SCHEMA`|
 
-Beim Einbau in neue Projekte sollte diese Komponente nicht isoliert betrachtet werden. Fast alle Framework-Klassen hängen indirekt an der zentralen Konfiguration `Vars` und an der gemeinsamen Einbindung über `_config.inc.php`. Dadurch bleibt der Anwendungscode kurz, aber Konfigurationsfehler fallen oft erst zur Laufzeit auf. Für saubere Projekte empfiehlt es sich deshalb, zuerst eine kleine Setup- oder Healthcheck-Seite anzulegen, die prüft, ob die Klasse geladen ist, ob die benötigten Pfade existieren und ob Schreib-/Leserechte stimmen.
+## Verwendung im Framework
 
-Ein typischer Integrationsablauf sieht so aus:
+`Auth` wird über den zentralen Loader eingebunden und ist damit projektweit verfügbar. Je nach Klasse arbeitet sie mit GBDB, Konfiguration, Dateisystem, HTTP, Sessions, Cookies oder externen APIs zusammen. Die konkrete Verantwortung bleibt aber innerhalb der Klasse gekapselt, damit Seiten und Plugins nur kurze, lesbare Aufrufe benötigen.
 
-1. `_config.inc.php` laden.
-2. Benötigte Konstanten und `Vars`-Werte prüfen.
-3. Falls nötig Initialisierung ausführen.
-4. Einen einfachen Leseaufruf testen.
-5. Einen einfachen Schreibaufruf testen.
-6. Fehlerfälle testen, nicht nur den Erfolgsfall.
+## Typischer Ablauf
 
-## Test-Checkliste
+1. `_config.inc.php` einbinden.
+2. Eingaben vorbereiten und validieren.
+3. passende öffentliche Methode von `Auth` aufrufen.
+4. Rückgabe prüfen.
+5. Fehlerfälle sauber behandeln und keine sensitiven Werte ausgeben.
 
-- Läuft der Code lokal und auf dem Server mit derselben PHP-Version?
-- Sind alle benötigten Core-Dateien wirklich geladen?
-- Sind Rückgaben dokumentiert und werden sie im Anwendungscode geprüft?
-- Gibt es einen Test mit leerer Eingabe, ungültiger Eingabe und gültiger Eingabe?
-- Sind Dateipfade relativ zum Projekt-Root und nicht zum aktuellen Browserpfad gedacht?
-- Sind produktive Secrets aus Logs, Fehlermeldungen und Screenshots entfernt?
-- Funktioniert der Ablauf nach einem frischen Upload ohne manuelles Nachbessern der Rechte?
+## Hinweise zur Verwendung
 
-## Wartung und Erweiterung
+- Eingaben aus Formularen oder Requests vor der Übergabe validieren.
+- Rückgaben immer auf erwartete Struktur prüfen, insbesondere bei API-/Remote-Klassen.
+- Bei Klassen mit Datei- oder DB-Zugriff müssen Schreibrechte im Projektordner passen.
+- Bei sicherheitsrelevanten Klassen keine Tokens, Passwörter oder Secrets in Logs ausgeben.
+- Bei Erweiterungen den bestehenden Stil beibehalten: Konstanten zuerst, private Helfer danach, öffentliche Methoden am Ende.
 
-Wenn diese Klasse erweitert wird, sollte jede neue öffentliche Methode sofort in dieser Dokumentation auftauchen. Bei Klassen, die mit GBDB arbeiten, muss außerdem geprüft werden, ob neue Tabellen oder Spalten in `schema.json` bzw. `schema_v2.json` berücksichtigt werden müssen. Bei Klassen, die Remote-Requests ausführen, sollten Fehlermeldungen immer so formuliert werden, dass Entwickler das Problem finden können, ohne dabei Auth-Tokens oder API-Keys offenzulegen.
+## Fehlerquellen
 
-## Praktische Hinweise für andere Entwickler
+| Problem | Mögliche Ursache | Empfehlung |
+|---|---|---|
+| leere oder unerwartete Rückgabe | fehlende Daten, falscher Pfad oder falscher Context | Eingabeparameter und Config prüfen. |
+| Schreiboperation schlägt fehl | Webserver hat keine Rechte | Besitzer, Gruppe und ACLs prüfen. |
+| Remote/API-Antwort ungültig | Endpoint, Auth oder JSON-Format falsch | Response debuggen, aber Secrets maskieren. |
+| Methode wirkt ohne Effekt | falsche Instanz, falsche Base oder Cache-Zustand | Context und aktive Instanz kontrollieren. |
 
-Dieses Framework folgt bewusst einem sehr direkten PHP-Stil. Viele Methoden sind statisch und dadurch einfach aufzurufen. Der Nachteil ist, dass falsche globale Konfigurationen schneller Auswirkungen auf mehrere Klassen haben. Andere Entwickler sollten deshalb nicht nur die einzelne Methode lesen, sondern auch die umgebenden Dateien `ENV.php`, `_config.inc.php` und bei Remote-Funktionen `backend.php` prüfen.
+## Erweiterungsidee
+
+Wenn diese Klasse erweitert wird, sollte jede neue öffentliche Methode ein klares Ziel haben, eine robuste Rückgabe liefern und keine versteckten Seiteneffekte erzeugen. Für wiederkehrende Validierung oder Normalisierung besser private Hilfsmethoden ergänzen, statt Logik in mehreren öffentlichen Methoden zu duplizieren.

@@ -1,143 +1,336 @@
-# GBDB
+# GBDB – dateibasierte Datenbank v1
+
 ## Zweck
-`GBDB` ist die dateibasierte JSON-Datenbank des Frameworks. Sie verwaltet Bases, Tabellen, Spalten, IDs, Append-Logs, Locks, Meta-Dateien und Schema-Synchronisierung ohne externen SQL-Server.
-## Datei und Einbindung
-- Klasse: `GBDB`
-- Datei: `assets/php/inc/gbdb_framework/core/gbdb_sys.php`
-- Wird normalerweise über `assets/php/inc/gbdb_framework/gbdb.php` oder über `assets/php/inc/.config/_config.inc.php` geladen.
 
-## Konstanten
-| Konstante | Zweck / Wert |
-|---|---|
-| `SCHEMA_FILE` | `"assets/php/inc/gbdb_framework/json/schema.json"` |
+`GBDB` ist die klassische lokale Datenbankklasse des Frameworks. Sie speichert Daten dateibasiert unter `Vars::DB_PATH()`, normalerweise also unter `assets/DB/`. Die Klasse ist für Projekte gedacht, die einfache Tabellen, schnelle CRUD-Operationen, automatische Schemapflege und robuste Dateioperationen brauchen, ohne sofort eine SQL-Datenbank einzurichten.
 
-## Arbeitsweise
-Die Klasse wird überwiegend statisch genutzt. Öffentliche Methoden sind die stabile API für Projektcode. Private/protected Methoden sind interne Bausteine und sollten nicht direkt aus Anwendungen heraus verwendet werden.
+## Grundidee
 
-Typische Aufrufkette:
+Eine GBDB besteht aus:
 
-1. Framework-Konfiguration laden.
-2. Optional benötigte Initialisierung ausführen.
-3. Öffentliche Methode der Klasse nutzen.
-4. Rückgabewert auf Fehler/Leere prüfen.
+- **Database/Base**: logische Datenbank, z. B. `main`, `userdb`, `tickets`.
+- **Table**: Tabelle innerhalb einer Base, z. B. `users`, `settings`, `logs`.
+- **Rows**: Arrays mit automatischer `id`.
+- **Header Row**: interne Zeile mit `id = -1`, die die Spaltenstruktur hält.
+- **Meta-Datei**: technische Informationen wie Version, Constraints, Indizes, Checksummen.
+- **Append/WAL-Datei**: zwischengespeicherte Operationen für schnelle Schreibvorgänge.
+- **Schema JSON**: automatische Dokumentation/Strukturablage in `schema.json`.
 
-## Öffentliche API
-| Methode | Rückgabe | Beschreibung |
-|---|---:|---|
-| `createDatabase(string $name)` | `bool` | Erstellt eine neue Ressource. |
-| `deleteDatabase(string $name)` | `bool` | Löscht einen Eintrag oder entfernt eine Ressource. |
-| `createTable(string $database, string $table, array $cols)` | `bool` | Erstellt eine neue Ressource. |
-| `addColumn(string $database, string $table, string $column, mixed $default = "")` | `bool` | Kapselt die Fachlogik für `addColumn()` innerhalb dieser Klasse. |
-| `deleteTable(string $database, string $table)` | `bool` | Löscht einen Eintrag oder entfernt eine Ressource. |
-| `insertData(string $database, string $table, mixed $data)` | `int` | Fügt neue Daten ein und gibt je nach Modul eine ID oder Erfolgsstatus zurück. |
-| `deleteData(string $database, string $table, mixed $where, mixed $is)` | `bool` | Löscht einen Eintrag oder entfernt eine Ressource. |
-| `editData(string $database, string $table, mixed $where, mixed $is, mixed $newData)` | `bool` | Aktualisiert vorhandene Daten anhand eines Suchkriteriums. |
-| `getData(string $database, string $table, bool $filter = false, mixed $where = "", mixed $is = "")` | `mixed` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `elementExists(string $database, string $table, mixed $where, mixed $is)` | `bool` | Kapselt die Fachlogik für `elementExists()` innerhalb dieser Klasse. |
-| `listDBs()` | `array` | Listet vorhandene Ressourcen auf. |
-| `listTables(string $database, bool $descending = false)` | `array` | Listet vorhandene Ressourcen auf. |
-| `compactTable(string $database, string $table)` | `bool` | Kapselt die Fachlogik für `compactTable()` innerhalb dieser Klasse. |
-| `deleteAll(string $database)` | `bool` | Löscht einen Eintrag oder entfernt eine Ressource. |
-| `nextID(string $database, string $table)` | `int` | Kapselt die Fachlogik für `nextID()` innerhalb dieser Klasse. |
-| `getKeys(string $database, string $table)` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `query(string $script, array $ctx = [], array $params = [])` | `array` | Führt eine GreenQL-Abfrage aus. |
-| `runScript(string $path, array $params = [], array $ctx = [])` | `array` | Führt ein Script aus und gibt das Ergebnis zurück. |
+## Warum dateibasiert?
 
-## Beispiele
+Die Intention ist Kontrolle und Einfachheit. Für viele interne Tools, kleine SaaS-Projekte oder Adminbereiche ist eine dateibasierte DB ausreichend und schneller aufzusetzen als SQL. Gleichzeitig bringt GBDB inzwischen Funktionen mit, die man sonst eher aus größeren Systemen kennt: Locks, Snapshots, Health Checks, Constraints, Indizes und Transaktionen.
+
+## Speicher- und Namenslogik
+
+Datenbank- und Tabellennamen werden intern tokenisiert. Dadurch liegen Dateien nicht direkt als `main/users.db` herum, sondern unter sicheren, generierten Namen. Das erschwert direkte Manipulationen und erlaubt eine zusätzliche Trennung zwischen Anzeigename und Speichername.
+
+Wenn `Vars::crypt_data()` aktiv ist, werden Inhalte zusätzlich über die Framework-Kryptologik kodiert.
+
+## Minimalbeispiel
+
 ```php
-include 'assets/php/inc/.config/_config.inc.php';
+GBDB::createDatabase("main");
+GBDB::createTable("main", "users", ["uid", "username", "email", "active"]);
 
-GBDB::createDatabase('main');
-GBDB::createTable('main', 'users', ['uid', 'username', 'email']);
-
-$id = GBDB::insertData('main', 'users', [
-    'uid' => 'u001',
-    'username' => 'markus',
-    'email' => 'markus@example.test'
+$id = GBDB::insertData("main", "users", [
+    "uid" => "u1",
+    "username" => "markus",
+    "email" => "markus@example.com",
+    "active" => 1
 ]);
 
-$user = GBDB::getData('main', 'users', true, 'uid', 'u001');
-GBDB::editData('main', 'users', 'uid', 'u001', ['username' => 'Markus']);
+$user = GBDB::getData("main", "users", true, "uid", "u1");
+print_r($user);
 ```
 
-## Fehlerquellen und Debugging
-- Prüfe zuerst, ob `_config.inc.php` korrekt geladen wurde.
-- Bei leeren Rückgaben immer zwischen `false`, leerem Array und nicht vorhandenem Datensatz unterscheiden.
-- Bei Datei- oder GBDB-Zugriffen Schreibrechte des Webservers prüfen.
-- Bei Remote-Aufrufen Netzwerk, URL, Auth-Key und JSON-Antwort kontrollieren.
-- In Entwicklung `Vars::__DEV__()` bzw. eigene Logs nutzen, aber produktive Secrets nie ausgeben.
+## CRUD-Operationen
 
-## Interne Methoden
-Diese Methoden erklären die interne Struktur. Sie sind nicht als öffentliche API gedacht:
+### Datenbank erstellen
 
-- `private static rootPath() : string` – Kapselt die Fachlogik für `rootPath()` innerhalb dieser Klasse.
-- `private static schemaPath() : string` – Kapselt die Fachlogik für `schemaPath()` innerhalb dieser Klasse.
-- `private static readSchema() : array` – Liest Inhalt aus Datei, Request oder Speicher.
-- `private static writeSchema(array $schema) : bool` – Schreibt Inhalt in Datei, Datenbank oder Speicher.
-- `private static setSchemaTable(string $database, string $table, array $cols) : void` – Setzt einen Wert oder Zustand in der jeweiligen Komponente.
-- `private static dropSchemaTable(string $database, string $table) : void` – Kapselt die Fachlogik für `dropSchemaTable()` innerhalb dieser Klasse.
-- `private static dropSchemaDatabase(string $database) : void` – Kapselt die Fachlogik für `dropSchemaDatabase()` innerhalb dieser Klasse.
-- `private static autoCompact(string $database, string $table) : void` – Kapselt die Fachlogik für `autoCompact()` innerhalb dieser Klasse.
-- `private static nameToken(string $plain, string $ns = 'g') : string` – Kapselt die Fachlogik für `nameToken()` innerhalb dieser Klasse.
-- `private static dbIndexFile() : string` – Kapselt die Fachlogik für `dbIndexFile()` innerhalb dieser Klasse.
-- `private static tableIndexFileByDbToken(string $dbToken) : string` – Kapselt die Fachlogik für `tableIndexFileByDbToken()` innerhalb dieser Klasse.
-- `private static readIndex(string $file) : array` – Liest Inhalt aus Datei, Request oder Speicher.
-- `private static writeIndex(string $file, array $map) : bool` – Schreibt Inhalt in Datei, Datenbank oder Speicher.
-- `private static getDbToken(string $dbPlain, bool $ensure = false) : ?string` – Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück.
-- `private static getTableToken(string $dbPlain, string $tablePlain, bool $ensure = false) : ?string` – Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück.
-- `private static dropTableFromIndex(string $dbPlain, string $tablePlain) : void` – Kapselt die Fachlogik für `dropTableFromIndex()` innerhalb dieser Klasse.
-- `private static removeTableIndexIfExists(string $dbPlain) : void` – Kapselt die Fachlogik für `removeTableIndexIfExists()` innerhalb dieser Klasse.
-- `private static makePath(string $database, string $table, bool $ensure = false) : string` – Kapselt die Fachlogik für `makePath()` innerhalb dieser Klasse.
-- `private static ini(string $file) : array` – Kapselt die Fachlogik für `ini()` innerhalb dieser Klasse.
-- `private static writeTable(string $file, array $db) : bool` – Schreibt Inhalt in Datei, Datenbank oder Speicher.
-- `private static lockFileForTable(string $database, string $table, bool $ensure = false) : string` – Kapselt die Fachlogik für `lockFileForTable()` innerhalb dieser Klasse.
-- `private static metaFileForTable(string $database, string $table, bool $ensure = false) : string` – Meta-Datei pro Tabelle! - plain:  __meta__<table>.json - crypt:  token('__meta__|<tblToken>').db
-- `private static appendFileForTable(string $database, string $table, bool $ensure = false) : string` – Append-Datei pro Tabelle! - plain: __append__<table>.json (optional, aber wir halten es konsistent) - crypt: token('__append__|<tblToken>').db
-- `private static withTableLock(string $lockFile, callable $fn) : mixed` – Kapselt die Fachlogik für `withTableLock()` innerhalb dieser Klasse.
-- `private static readMeta(string $metaFile) : array` – Liest Inhalt aus Datei, Request oder Speicher.
-- `private static writeMeta(string $metaFile, array $meta) : bool` – Schreibt Inhalt in Datei, Datenbank oder Speicher.
-- `private static isHeaderRow(array $row) : bool` – Kapselt die Fachlogik für `isHeaderRow()` innerhalb dieser Klasse.
-- `private static ensureHeader(array &$tableData, array $cols) : void` – Kapselt die Fachlogik für `ensureHeader()` innerhalb dieser Klasse.
-- `private static buildRowFromHeader(array $header, array $data, int $id) : array` – Kapselt die Fachlogik für `buildRowFromHeader()` innerhalb dieser Klasse.
-- `private static appendOp(string $appendFile, array $op) : bool` – Kapselt die Fachlogik für `appendOp()` innerhalb dieser Klasse.
-- … weitere 2 interne Methoden.
+```php
+GBDB::createDatabase("main");
+```
+
+Erstellt eine Base und aktualisiert interne Indexdateien.
+
+### Tabelle erstellen
+
+```php
+GBDB::createTable("main", "products", ["sku", "name", "price", "active"]);
+```
+
+Die Spalten werden im Header und in `schema.json` hinterlegt.
+
+### Daten einfügen
+
+```php
+$id = GBDB::insertData("main", "products", [
+    "sku" => "P-001",
+    "name" => "Audio Guide Basic",
+    "price" => "49.00",
+    "active" => 1
+]);
+```
+
+Rückgabe ist die neue numerische Row-ID.
+
+### Daten lesen
+
+```php
+$all = GBDB::getData("main", "products");
+$one = GBDB::getData("main", "products", true, "sku", "P-001");
+```
+
+Mit `$filter = true` wird nach `$where == $is` gefiltert.
+
+### Daten ändern
+
+```php
+GBDB::editData("main", "products", "sku", "P-001", [
+    "price" => "59.00"
+]);
+```
+
+Nur übergebene Felder werden geändert. Nicht übergebene Spalten bleiben erhalten.
+
+### Daten löschen
+
+```php
+GBDB::deleteData("main", "products", "sku", "P-001");
+```
+
+## Schema-Automatik
+
+`createTable`, `addColumn`, `deleteTable` und `deleteDatabase` pflegen `schema.json`. Dadurch bleibt eine technische Strukturübersicht erhalten, die für Updates, Migrationen und Dokumentation genutzt werden kann.
+
+```php
+GBDB::addColumn("main", "products", "description", "");
+```
+
+## Indizes
+
+Indizes beschleunigen Lookups auf häufig genutzten Spalten.
+
+```php
+GBDB::createIndex("main", "products", "sku");
+$indexes = GBDB::listIndexes("main", "products");
+GBDB::dropIndex("main", "products", "sku");
+```
+
+Indizes werden aus den vorhandenen Rows aufgebaut und bei Bedarf neu erzeugt.
+
+## Constraints
+
+Constraints schützen einfache Datenregeln.
+
+```php
+GBDB::addConstraint("main", "users", "email", "unique");
+GBDB::addConstraint("main", "users", "username", "required");
+```
+
+Unterstützte Typen:
+
+| Constraint | Bedeutung |
+|---|---|
+| `unique` | Wert darf in der Spalte nur einmal vorkommen. |
+| `required` | Wert darf nicht leer sein. |
+
+## Snapshots und Restore
+
+Snapshots sichern den Tabellenzustand inklusive technischer Begleitdateien.
+
+```php
+$snapshotId = GBDB::snapshot("main", "products", "before_update");
+GBDB::restoreSnapshot("main", "products", $snapshotId);
+```
+
+Das ist besonders hilfreich vor Migrations- oder Update-Schritten.
+
+## Health und Repair
+
+```php
+$health = GBDB::health("main", "products");
+GBDB::repairTable("main", "products");
+```
+
+`health()` prüft Struktur, Header, Meta, Append/WAL und weitere Konsistenzpunkte. `repairTable()` versucht, wieder einen konsistenten Tabellenzustand herzustellen.
+
+## Transaktionen
+
+GBDB unterstützt einfache Transaktionen über Snapshots.
+
+```php
+GBDB::begin();
+try {
+    GBDB::insertData("main", "logs", ["msg" => "start"]);
+    GBDB::editData("main", "settings", "key", "mode", ["value" => "live"]);
+    GBDB::commit();
+} catch (Throwable $e) {
+    GBDB::rollback();
+}
+```
+
+Intention: Vor mehreren zusammenhängenden Änderungen wird ein Sicherungszustand erzeugt. Bei `rollback()` wird dieser wiederhergestellt.
+
+## GreenQL-Ausführung über GBDB
+
+```php
+$result = GBDB::query('
+    ROOT main;
+    PICK * FROM users LIMIT 10;
+');
+```
+
+Oder aus Datei:
+
+```php
+$result = GBDB::runScript("scripts/greenql/makeUser.gql", [
+    "username" => "admin"
+]);
+```
+
+## Öffentliche Methoden
+
+| Methode | Zweck |
+|---|---|
+| `createDatabase($name)` | Legt eine Base an. |
+| `deleteDatabase($name)` | Entfernt eine Base inklusive Tabellen. |
+| `createTable($database, $table, $cols)` | Legt Tabelle mit Spalten an. |
+| `addColumn($database, $table, $column, $default)` | Fügt Spalte hinzu und pflegt Schema. |
+| `deleteTable($database, $table)` | Entfernt Tabelle und technische Artefakte. |
+| `insertData($database, $table, $data)` | Fügt eine Row ein. |
+| `getData($database, $table, $filter, $where, $is)` | Liest alle oder gefilterte Rows. |
+| `editData($database, $table, $where, $is, $newData)` | Aktualisiert passende Rows. |
+| `deleteData($database, $table, $where, $is)` | Löscht passende Rows. |
+| `elementExists($database, $table, $where, $is)` | Prüft Existenz. |
+| `listDBs()` | Listet Bases. |
+| `listTables($database)` | Listet Tabellen. |
+| `compactTable($database, $table)` | Schreibt Append-Operationen in Hauptdatei zurück. |
+| `nextID($database, $table)` | Gibt nächste Row-ID zurück. |
+| `getKeys($database, $table)` | Gibt Tabellenspalten zurück. |
+| `createIndex/dropIndex/listIndexes/rebuildIndexes` | Indexverwaltung. |
+| `addConstraint/dropConstraint/listConstraints` | Constraint-Verwaltung. |
+| `snapshot/restoreSnapshot` | Sicherung und Wiederherstellung. |
+| `health/repairTable/meta` | Diagnose und Metadaten. |
+| `begin/commit/rollback/transactionStatus` | Transaktionssteuerung. |
+| `query/runScript` | GreenQL ausführen. |
 
 ## Best Practices
-- Öffentliche Methoden bevorzugen und interne Dateipfade nicht hart im Anwendungscode duplizieren.
-- Rückgaben immer validieren, bevor sie in HTML, API-Antworten oder weitere DB-Operationen fließen.
-- Für neue Features erst Schema/Tabellen sauber anlegen und danach Daten schreiben.
-- Für produktive Systeme Backups, Schreibrechte und Authentifizierung vor dem Rollout testen.
 
-## Zusatzhinweise
-GBDB speichert Tabellen als JSON-Dateien mit Header-Zeile (`id=-1`), Meta-Datei, Append-Datei und Lock-Datei. Das System ist für kleine bis mittlere Webapps gedacht, bei sehr großen Datenmengen sollte SQL geprüft werden.
+- Nutze sprechende, einfache Namen: `main`, `users`, `settings`.
+- Lege Tabellen früh mit vollständiger Spaltenliste an.
+- Nutze `addColumn()` statt manuell Dateien zu editieren.
+- Vor größeren Updates `snapshot()` ausführen.
+- Für häufige Suche nach `uid`, `email`, `slug` oder `rfid` Indizes anlegen.
+- Für Login-Daten `unique` und `required` Constraints nutzen.
+- Niemals Tabellen-Dateien direkt bearbeiten, wenn die App läuft.
 
-## Integration in eigene Projekte
+# Erweiterte Entwicklernotizen
 
-Beim Einbau in neue Projekte sollte diese Komponente nicht isoliert betrachtet werden. Fast alle Framework-Klassen hängen indirekt an der zentralen Konfiguration `Vars` und an der gemeinsamen Einbindung über `_config.inc.php`. Dadurch bleibt der Anwendungscode kurz, aber Konfigurationsfehler fallen oft erst zur Laufzeit auf. Für saubere Projekte empfiehlt es sich deshalb, zuerst eine kleine Setup- oder Healthcheck-Seite anzulegen, die prüft, ob die Klasse geladen ist, ob die benötigten Pfade existieren und ob Schreib-/Leserechte stimmen.
+## Interne Tabellenstruktur genauer erklärt
 
-Ein typischer Integrationsablauf sieht so aus:
+GBDB speichert eine Tabelle nicht als einfache Liste von Nutzdaten, sondern als technischen Tabellenzustand. Die erste Strukturzeile ist die Header-Zeile. Sie besitzt intern `id = -1` und beschreibt die Spalten. Das hat zwei Vorteile: Erstens kann eine Tabelle auch ohne separate SQL-DDL gelesen werden. Zweitens kann GBDB beim Einfügen automatisch fehlende Felder mit leeren Standardwerten ergänzen.
 
-1. `_config.inc.php` laden.
-2. Benötigte Konstanten und `Vars`-Werte prüfen.
-3. Falls nötig Initialisierung ausführen.
-4. Einen einfachen Leseaufruf testen.
-5. Einen einfachen Schreibaufruf testen.
-6. Fehlerfälle testen, nicht nur den Erfolgsfall.
+Ein konzeptioneller Tabellenzustand sieht so aus:
 
-## Test-Checkliste
+```json
+[
+  {"id":-1,"uid":"uid","username":"username","email":"email"},
+  {"id":1,"uid":"u1","username":"admin","email":"admin@example.com"},
+  {"id":2,"uid":"u2","username":"demo","email":"demo@example.com"}
+]
+```
 
-- Läuft der Code lokal und auf dem Server mit derselben PHP-Version?
-- Sind alle benötigten Core-Dateien wirklich geladen?
-- Sind Rückgaben dokumentiert und werden sie im Anwendungscode geprüft?
-- Gibt es einen Test mit leerer Eingabe, ungültiger Eingabe und gültiger Eingabe?
-- Sind Dateipfade relativ zum Projekt-Root und nicht zum aktuellen Browserpfad gedacht?
-- Sind produktive Secrets aus Logs, Fehlermeldungen und Screenshots entfernt?
-- Funktioniert der Ablauf nach einem frischen Upload ohne manuelles Nachbessern der Rechte?
+Die tatsächliche Datei kann je nach Konfiguration verschlüsselt/obfuskiert und tokenisiert sein. Entwickler sollen deshalb nie auf Dateinamen oder Rohdaten vertrauen, sondern immer die Klassenmethoden nutzen.
 
-## Wartung und Erweiterung
+## Warum `getData()` manchmal Array und manchmal einzelne Row liefert
 
-Wenn diese Klasse erweitert wird, sollte jede neue öffentliche Methode sofort in dieser Dokumentation auftauchen. Bei Klassen, die mit GBDB arbeiten, muss außerdem geprüft werden, ob neue Tabellen oder Spalten in `schema.json` bzw. `schema_v2.json` berücksichtigt werden müssen. Bei Klassen, die Remote-Requests ausführen, sollten Fehlermeldungen immer so formuliert werden, dass Entwickler das Problem finden können, ohne dabei Auth-Tokens oder API-Keys offenzulegen.
+`getData()` ist bewusst flexibel gehalten. Ohne Filter liefert sie eine Liste von Rows. Mit Filter kann sie die passenden Daten nach Spalte/Wert suchen. Je nach Implementationsstand und Trefferlage sollte Code defensiv prüfen, ob eine einzelne Row oder eine Liste zurückkommt.
 
-## Praktische Hinweise für andere Entwickler
+```php
+$data = GBDB::getData("main", "users", true, "uid", "u1");
 
-Dieses Framework folgt bewusst einem sehr direkten PHP-Stil. Viele Methoden sind statisch und dadurch einfach aufzurufen. Der Nachteil ist, dass falsche globale Konfigurationen schneller Auswirkungen auf mehrere Klassen haben. Andere Entwickler sollten deshalb nicht nur die einzelne Methode lesen, sondern auch die umgebenden Dateien `ENV.php`, `_config.inc.php` und bei Remote-Funktionen `backend.php` prüfen.
+if (isset($data["uid"])) {
+    // einzelner Datensatz
+}
+
+if (isset($data[0])) {
+    // Liste von Datensätzen
+}
+```
+
+## Empfohlene Tabellenanlage
+
+Für stabile Anwendungen sollte jede Tabelle eine technische ID-Spalte besitzen, auch wenn GBDB selbst numerische `id`s vergibt. Beispiel:
+
+```php
+GBDB::createTable("main", "users", [
+    "uid",
+    "username",
+    "email",
+    "password",
+    "active",
+    "role",
+    "created_at",
+    "updated_at"
+]);
+```
+
+Der Grund: Die interne `id` ist praktisch, aber eine eigene `uid` ist portabler, besser für APIs, stabiler für Importe und leichter mit externen Systemen zu verknüpfen.
+
+## Import-Muster
+
+```php
+GBDB::begin();
+
+try {
+    foreach ($items as $item) {
+        if (!GBDB::elementExists("main", "products", "sku", $item["sku"])) {
+            GBDB::insertData("main", "products", $item);
+            continue;
+        }
+
+        GBDB::editData("main", "products", "sku", $item["sku"], $item);
+    }
+
+    GBDB::commit();
+} catch (Throwable $e) {
+    GBDB::rollback();
+    throw $e;
+}
+```
+
+## Wartungsmuster
+
+```php
+foreach (GBDB::listTables("main") as $table) {
+    $health = GBDB::health("main", $table);
+
+    if (($health["ok"] ?? false) !== true) {
+        GBDB::repairTable("main", $table);
+    }
+
+    GBDB::compactTable("main", $table);
+}
+```
+
+## Wann GBDB nicht ideal ist
+
+GBDB ist stark für kleine bis mittlere Projekte, interne Tools und kontrollierte SaaS-Instanzen. Für sehr große Datenmengen, hochparallele Schreiblast, komplexe Joins oder analytische Abfragen ist SQL besser geeignet. Das Framework bietet dafür `SQL` und `DatabaseBridge` als Ausweich-/Integrationsschicht.
+
+## Migrationsstrategie
+
+Bei neuen Versionen sollte man nicht direkt alte Dateien manipulieren. Besser:
+
+1. neue Spalten über `addColumn()` ergänzen,
+2. Defaults setzen,
+3. optional Constraints/Indizes anlegen,
+4. Snapshot erzeugen,
+5. Daten transformieren,
+6. Health prüfen.
+
+```php
+GBDB::addColumn("main", "users", "last_login", "");
+GBDB::createIndex("main", "users", "uid");
+GBDB::snapshot("main", "users", "after_schema_update");
+```

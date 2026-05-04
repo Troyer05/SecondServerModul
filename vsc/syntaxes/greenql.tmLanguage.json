@@ -1,0 +1,581 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "greenQL",
+  "scopeName": "source.greenql",
+  "fileTypes": [
+    "gql",
+    "greenql",
+    "gq",
+    "gbdb",
+    "gdb"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#metaBlock"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#fileCommands"
+    },
+    {
+      "include": "#logging"
+    },
+    {
+      "include": "#errorMsg"
+    },
+    {
+      "include": "#definitions"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#advancedTargets"
+    },
+    {
+      "include": "#commands"
+    },
+    {
+      "include": "#runtimeFunctions"
+    },
+    {
+      "include": "#literalsVariables"
+    },
+    {
+      "include": "#numbersOperatorsPunctuation"
+    },
+    {
+      "include": "#identifiers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.greenql",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.line.double-slash.greenql",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.line.double-dash.greenql",
+          "match": "--.*$"
+        },
+        {
+          "name": "comment.block.greenql",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.greenql",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.greenql",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.greenql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.greenql",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.backtick.greenql",
+          "begin": "`",
+          "end": "`",
+          "patterns": [
+            {
+              "name": "constant.character.escape.greenql",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "metaBlock": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(META)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.meta.greenql"
+            }
+          }
+        },
+        {
+          "name": "meta.object.key.quoted.greenql",
+          "match": "(?<=\")([A-Za-z_][A-Za-z0-9_\\-]*)(?=\"\\s*:)"
+        },
+        {
+          "name": "meta.object.key.bare.greenql",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_\\-]*(?=\\s*:)"
+        }
+      ]
+    },
+    "fileCommands": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(FILE)\\s*(\\.)\\s*(INCLUDE|RUN|BACK)\\b",
+          "captures": {
+            "1": {
+              "name": "support.type.file.greenql"
+            },
+            "2": {
+              "name": "punctuation.accessor.greenql"
+            },
+            "3": {
+              "name": "support.function.file.greenql"
+            }
+          }
+        },
+        {
+          "name": "support.type.file.greenql",
+          "match": "(?i)\\bFILE\\b"
+        },
+        {
+          "name": "support.function.file.greenql",
+          "match": "(?i)\\b(?:INCLUDE|RUN)\\b"
+        }
+      ]
+    },
+    "logging": {
+      "patterns": [
+        {
+          "name": "support.function.output.greenql",
+          "match": "(?i)\\bOUTPUT\\b"
+        },
+        {
+          "name": "support.function.logging.greenql",
+          "match": "(?i)\\b(?:SET_LOGFILE|LOG|CLEAR_LOG|DELETE_LOG_FILE)\\b"
+        }
+      ]
+    },
+    "errorMsg": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(ERROR)\\s+(MSG)\\b",
+          "captures": {
+            "1": {
+              "name": "invalid.deprecated.error.greenql"
+            },
+            "2": {
+              "name": "support.function.message.greenql"
+            }
+          }
+        },
+        {
+          "name": "support.function.message.greenql",
+          "match": "(?i)\\bMSG\\b"
+        }
+      ]
+    },
+    "definitions": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(C|CLASS)\\s+([A-Za-z][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.class.greenql"
+            },
+            "2": {
+              "name": "entity.name.type.class.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(F|FUNCTION)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.greenql"
+            },
+            "2": {
+              "name": "entity.name.function.definition.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(CALL)\\s+([A-Za-z][A-Za-z0-9_]*)\\s*(/)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": {
+              "name": "keyword.control.call.greenql"
+            },
+            "2": {
+              "name": "entity.name.type.class.greenql"
+            },
+            "3": {
+              "name": "punctuation.separator.method.greenql"
+            },
+            "4": {
+              "name": "entity.name.function.call.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(CALL)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": {
+              "name": "keyword.control.call.greenql"
+            },
+            "2": {
+              "name": "entity.name.function.call.greenql"
+            }
+          }
+        },
+        {
+          "name": "storage.modifier.visibility.greenql",
+          "match": "(?i)\\b(?:PUB|PRIV|PUBLIC|PRIVATE|PROTECTED|STATIC)\\b"
+        },
+        {
+          "name": "keyword.control.return.greenql",
+          "match": "(?i)\\b(?:BACK|END_PROC)\\b"
+        },
+        {
+          "match": "(?i)\\b(this_f)(\\.)(restart)(?=\\s*\\()",
+          "captures": {
+            "1": {
+              "name": "variable.language.this.greenql"
+            },
+            "2": {
+              "name": "punctuation.accessor.greenql"
+            },
+            "3": {
+              "name": "support.function.restart.greenql"
+            }
+          }
+        },
+        {
+          "name": "variable.language.this-property.greenql",
+          "match": "\\bthis\\._[A-Za-z][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "variable.language.this.greenql",
+          "match": "\\bthis\\b"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(DECLARE|DECALRE|DELACE)\\s+(\\$[A-Za-z][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.declaration.greenql"
+            },
+            "2": {
+              "name": "constant.other.user.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(DECLARE|DECALRE|DELACE)\\s+(_[A-Za-z][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.declaration.greenql"
+            },
+            "2": {
+              "name": "variable.other.declaration.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(DECLARE|DECALRE|DELACE)\\s+([A-Za-z][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.declaration.greenql"
+            },
+            "2": {
+              "name": "invalid.illegal.variable.no-prefix.greenql"
+            }
+          }
+        },
+        {
+          "name": "support.function.parameter.greenql",
+          "match": "(?i)\\b(?:PARAM|param)(?=\\s*\\()"
+        },
+        {
+          "name": "storage.type.declaration.greenql",
+          "match": "(?i)\\b(?:DECLARE|DECALRE|DELACE)\\b"
+        }
+      ]
+    },
+    "commands": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(USE|ROOT|GROW|DROP|SHOW)\\s+(INSTANCE|INSTANCES)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.command.instance.greenql"
+            },
+            "2": {
+              "name": "keyword.control.target.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(GROW|DROP|SHOW)\\s+(BASE|BASES|TABLE|TABLES)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.command.schema-edit.greenql"
+            },
+            "2": {
+              "name": "keyword.control.target.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(ALTER)\\s+(TABLE)\\s+(ADD)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.command.schema-edit.greenql"
+            },
+            "2": {
+              "name": "keyword.control.target.greenql"
+            },
+            "3": {
+              "name": "keyword.control.clause.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(EXISTS)\\s+(INSTANCE|BASE|TABLE|DATA)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.exists.greenql"
+            },
+            "2": {
+              "name": "keyword.control.target.greenql"
+            }
+          }
+        },
+        {
+          "name": "keyword.control.flow.greenql",
+          "match": "(?i)\\b(?:IF|ELSE|FOR)\\b"
+        },
+        {
+          "name": "support.function.map-object.greenql",
+          "match": "(?i)\\bMAP_OBJECT\\b"
+        },
+        {
+          "name": "entity.name.command.query.greenql",
+          "match": "(?i)\\b(?:PICK|SEED|RESHAPE)\\b"
+        },
+        {
+          "name": "entity.name.command.danger.greenql",
+          "match": "(?i)\\b(?:ERASE|DELETE)\\b"
+        },
+        {
+          "name": "entity.name.command.greenql",
+          "match": "(?i)\\b(?:ROOT|BRANCH|DESCRIBE)\\b"
+        },
+        {
+          "name": "keyword.control.transaction.greenql",
+          "match": "(?i)\\b(?:BEGIN|COMMIT|ROLLBACK|TRANSACTION)\\b"
+        },
+        {
+          "name": "support.function.diagnostic.greenql",
+          "match": "(?i)\\b(?:PACK|PEEK|CHECK|HEALTH|REPAIR|SNAPSHOT|EXPLAIN|MONITOR|RECOVER|PAGE|CURSOR|FULLTEXT)\\b"
+        },
+        {
+          "name": "storage.modifier.index.greenql",
+          "match": "(?i)\\b(?:INDEX|INDEXES|UNINDEX|REINDEX|GRANT|REVOKE)\\b"
+        },
+        {
+          "name": "keyword.other.constraint.greenql",
+          "match": "(?i)\\b(?:CONSTRAINT|CONSTRAINTS|UNIQUE|REQUIRED)\\b"
+        },
+        {
+          "name": "keyword.control.target.greenql",
+          "match": "(?i)\\b(?:INSTANCE|INSTANCES|BASE|BASES|TABLE|TABLES|COLUMN|DATA)\\b"
+        },
+        {
+          "name": "keyword.control.clause.greenql",
+          "match": "(?i)\\b(?:FROM|WHERE|SORT|ASC|DESC|LIMIT|SIZE|SEARCH|AFTER|COLUMNS|MAX|WITH|IN|AS|ADD|FORCE|DEFAULT|PAGE|ON|READ|WRITE|ADMIN)\\b"
+        }
+      ]
+    },
+    "advancedTargets": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(MONITOR|RECOVER|PAGE|CURSOR|FULLTEXT)\\s+([A-Za-z_][A-Za-z0-9_-]*)(\\.)([A-Za-z_][A-Za-z0-9_-]*)",
+          "captures": {
+            "1": {
+              "name": "support.function.diagnostic.greenql"
+            },
+            "2": {
+              "name": "entity.name.database.greenql"
+            },
+            "3": {
+              "name": "punctuation.accessor.greenql"
+            },
+            "4": {
+              "name": "entity.name.table.greenql"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(FROM|IN|ROOT|BRANCH|DESCRIBE|PACK|SEED|RESHAPE|ERASE|DELETE|TABLE|BASE|INSTANCE)\\s+([A-Za-z_][A-Za-z0-9_-]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.clause.greenql"
+            },
+            "2": {
+              "name": "entity.name.table.greenql"
+            }
+          }
+        }
+      ]
+    },
+    "runtimeFunctions": {
+      "patterns": [
+        {
+          "name": "support.function.hash.greenql",
+          "match": "(?i)\\b(?:ENV|hash|hash_sha256|hash_sha512|hash_md5|hash_adler32|hash_crc32)(?=\\s*\\()"
+        },
+        {
+          "name": "support.function.api.greenql",
+          "match": "(?i)\\b(?:fetch_api|api_fetch|call_api)(?=\\s*\\()"
+        },
+        {
+          "name": "support.function.identity.greenql",
+          "match": "(?i)\\b(?:uni_random|spark_id|fresh_id)(?=\\s*\\()"
+        },
+        {
+          "name": "support.function.schema.greenql",
+          "match": "(?i)\\b(?:get_instances|instances|get_bases|bases|get_tables|tables|instance_exists|base_exists|table_exists|new_column|sprout_column|delete_column|prune_column|delete_instance|drop_instance|delete_base|drop_base|delete_table|drop_table|rename_instance|rename_base|rename_table)(?=\\s*\\()"
+        },
+        {
+          "name": "support.function.data.greenql",
+          "match": "(?i)\\b(?:get_data|fetch_data|fetch|add_data|plant_data|seed_data|editData|edit_data|reshape_data|delete_data|erase_data|delete_data_recursive|count_data|tally_data|last_added|last_data|transfer_data|copy_data|transfer_data_delete|move_data|set_data_readonly|lock_data|data_exists|monitor|recover|page|cursor|fulltext_search)(?=\\s*\\()"
+        },
+        {
+          "name": "support.function.convert.greenql",
+          "match": "(?i)\\b(?:len|count|json|str|string|int|float|bool|array|object|lower|upper|trim|slug|uuid|time|date)(?=\\s*\\()"
+        },
+        {
+          "name": "support.function.greenql",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()"
+        }
+      ]
+    },
+    "literalsVariables": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.greenql",
+          "match": "(?i)\\b(?:TRUE|FALSE)\\b"
+        },
+        {
+          "name": "constant.language.null.greenql",
+          "match": "(?i)\\bNULL\\b"
+        },
+        {
+          "name": "constant.language.time.greenql",
+          "match": "(?i)\\bNOW\\b"
+        },
+        {
+          "name": "constant.other.user.greenql",
+          "match": "\\$[A-Za-z][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "variable.other.greenql",
+          "match": "\\b_[A-Za-z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "numbersOperatorsPunctuation": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.greenql",
+          "match": "\\b0x[0-9A-Fa-f]+\\b"
+        },
+        {
+          "name": "constant.numeric.greenql",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        },
+        {
+          "name": "keyword.operator.comparison.greenql",
+          "match": "~=|==|!=|>=|<=|>|<"
+        },
+        {
+          "name": "keyword.operator.assignment.greenql",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.logical.greenql",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.arithmetic.greenql",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.wildcard.greenql",
+          "match": "\\*"
+        },
+        {
+          "name": "punctuation.terminator.statement.greenql",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.separator.comma.greenql",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.key-value.greenql",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.section.parens.greenql",
+          "match": "[()]"
+        },
+        {
+          "name": "punctuation.section.brackets.greenql",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.section.braces.greenql",
+          "match": "[{}]"
+        },
+        {
+          "name": "punctuation.accessor.greenql",
+          "match": "\\."
+        },
+        {
+          "name": "punctuation.separator.method.greenql",
+          "match": "/"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.assignment.field.greenql",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*=)"
+        },
+        {
+          "name": "entity.name.identifier.greenql",
+          "match": "\\b[A-Za-z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

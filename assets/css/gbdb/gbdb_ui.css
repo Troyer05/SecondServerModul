@@ -1,0 +1,52 @@
+/* Zentrale GBDB UI Navigation */
+.gbdbui-topbar{position:sticky;top:0;z-index:9999;display:flex;align-items:center;gap:18px;justify-content:space-between;padding:12px 18px;background:rgba(7,12,24,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.22);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.gbdbui-topbar *{box-sizing:border-box}
+.gbdbui-brand{font-weight:900;letter-spacing:.04em;color:#fff;text-decoration:none;white-space:nowrap}
+.gbdbui-topbar nav{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.gbdbui-topbar nav a{color:rgba(255,255,255,.74);text-decoration:none;border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:8px 11px;font-size:13px;background:rgba(255,255,255,.04)}
+.gbdbui-topbar nav a:hover,.gbdbui-topbar nav a.active{color:#fff;background:rgba(93,135,255,.22);border-color:rgba(111,153,255,.48)}
+.gbdbui-dashboard{min-height:100vh;background:radial-gradient(circle at top left,rgba(73,111,255,.28),transparent 34%),linear-gradient(135deg,#07101f,#111827 60%,#0a1020);color:#eef2ff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding-bottom:48px}
+.gbdbui-dashboard main{max-width:1180px;margin:0 auto;padding:42px 20px}
+.gbdbui-hero{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:28px;padding:32px;box-shadow:0 24px 80px rgba(0,0,0,.35)}
+.gbdbui-hero p{color:rgba(238,242,255,.72);max-width:780px;line-height:1.65}
+.gbdbui-hero h1{font-size:clamp(34px,5vw,58px);line-height:1.02;margin:0 0 14px}
+.gbdbui-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:22px}
+.gbdbui-card{display:block;color:#fff;text-decoration:none;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.13);border-radius:22px;padding:22px;box-shadow:0 18px 48px rgba(0,0,0,.25);transition:transform .18s ease,border-color .18s ease,background .18s ease}
+.gbdbui-card:hover{transform:translateY(-3px);border-color:rgba(111,153,255,.55);background:rgba(255,255,255,.11)}
+.gbdbui-card span{display:inline-flex;margin-bottom:12px;padding:6px 10px;border-radius:999px;background:rgba(111,153,255,.16);color:#c7d2fe;font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.gbdbui-card h2{margin:0 0 8px;font-size:20px}
+.gbdbui-card p{margin:0;color:rgba(238,242,255,.68);line-height:1.55}
+@media(max-width:760px){.gbdbui-topbar{align-items:flex-start;flex-direction:column}.gbdbui-topbar nav{justify-content:flex-start}.gbdbui-hero{padding:24px}}
+
+/* Zentrale Auth-/Rechte-Erweiterung */
+.gbdbui-topbar{gap:12px}.gbdbui-logout{display:flex;align-items:center;gap:10px;color:rgba(255,255,255,.72);font-size:13px}.gbdbui-logout button,.gbdbui-btn,.gbdbui-mini-btn{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;border-radius:999px;padding:8px 12px;text-decoration:none;cursor:pointer;font-weight:800}.gbdbui-logout button:hover,.gbdbui-btn:hover,.gbdbui-mini-btn:hover{background:rgba(93,135,255,.22);border-color:rgba(111,153,255,.48)}.gbdbui-mini-btn.primary{background:#6d8dff;border-color:#8ba3ff}.gbdbui-flash{margin:0 0 14px;padding:12px 14px;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.08);color:#fff}.gbdbui-flash.ok{border-color:rgba(74,222,128,.35);background:rgba(34,197,94,.13)}.gbdbui-flash.bad{border-color:rgba(248,113,113,.35);background:rgba(239,68,68,.14)}.gbdbui-kicker{margin:0 0 12px;color:#a5b4fc;font-weight:900;letter-spacing:.08em;text-transform:uppercase;font-size:12px}.gbdbui-wide{max-width:1380px!important}.gbdbui-panel-fix{margin-top:20px}.gbdbui-auth-body .auth-shell{min-height:100vh}.gbdbui-exec-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:18px;margin-top:20px}.gbdbui-exec-editor,.gbdbui-output-card{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.13);border-radius:24px;box-shadow:0 18px 48px rgba(0,0,0,.25);overflow:hidden}.gbdbui-editor-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.1);color:#fff}.gbdbui-editor-head div{display:flex;gap:8px;flex-wrap:wrap}.gbdbui-code-wrap{position:relative;min-height:620px;background:#07101f}.gbdbui-code-wrap pre,.gbdbui-code-wrap textarea{position:absolute;inset:0;margin:0;padding:18px;font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;white-space:pre;tab-size:4;overflow:auto}.gbdbui-code-wrap pre{pointer-events:none;color:#dbeafe}.gbdbui-code-wrap textarea{resize:none;color:transparent;background:transparent;caret-color:#fff;border:0;outline:0}.gbdbui-output-card pre{min-height:620px;margin:0;padding:18px;white-space:pre-wrap;color:#dbeafe;font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}.php-keyword{color:#93c5fd;font-weight:900}.php-var{color:#fde68a}.php-string{color:#86efac}.php-comment{color:#94a3b8;font-style:italic}@media(max-width:980px){.gbdbui-exec-layout{grid-template-columns:1fr}.gbdbui-logout{width:100%;justify-content:space-between}.gbdbui-code-wrap,.gbdbui-output-card pre{min-height:420px}}
+
+/* PHP Exec Editor: GreenQL-v2-Overlay-Technologie */
+.gbdbui-php-editor-shell pre,
+.gbdbui-php-editor-shell textarea{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+    font-size:14px;
+    line-height:1.58;
+    tab-size:4;
+    white-space:pre;
+    overflow:auto;
+}
+.gbdbui-php-editor-shell pre{
+    color:#dbeafe;
+    pointer-events:none;
+}
+.gbdbui-php-editor-shell textarea{
+    resize:none;
+    border:0;
+    border-radius:0;
+    background:transparent;
+    color:transparent;
+    caret-color:#ffffff;
+    -webkit-text-fill-color:transparent;
+    outline:none;
+}
+.gbdbui-php-editor-shell textarea::selection{
+    background:rgba(103,232,249,.26);
+    -webkit-text-fill-color:transparent;
+}
+.tok-php-tag{color:#67e8f9;font-weight:900}.tok-php-decl{color:#38bdf8;font-weight:900}.tok-php-visibility{color:#a78bfa;font-weight:900}.tok-php-control{color:#fb7185;font-weight:900}.tok-php-include{color:#f59e0b;font-weight:850}.tok-php-output{color:#c084fc;font-weight:850}.tok-php-types{color:#93c5fd;font-weight:850}.tok-php-lit{color:#f472b6;font-weight:850}.gbdbui-output-card{min-width:0}.gbdbui-output-card pre{overflow:auto;word-break:break-word}

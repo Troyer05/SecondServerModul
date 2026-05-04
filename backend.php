@@ -163,19 +163,74 @@ if ($do == "edit") {
     resp(400, "Edit failed.");
 }
 
+if ($do == "instance_exists") {
+    test_param(["instance"], $body);
+    resp(200, ["exists" => class_exists("GBDBv2") && in_array((string)$body["instance"], GBDBv2::listInstances(), true)]);
+}
+
+if ($do == "base_exists") {
+    test_param(["db"], $body);
+    resp(200, ["exists" => in_array((string)$body["db"], $driver::listDBs(), true)]);
+}
+
+if ($do == "table_exists") {
+    test_param(["db", "table"], $body);
+    resp(200, ["exists" => in_array((string)$body["table"], $driver::listTables((string)$body["db"]), true)]);
+}
+
+if ($do == "data_exists") {
+    test_param(["db", "table", "where", "is"], $body);
+    $row = $driver::getData((string)$body["db"], (string)$body["table"], true, (string)$body["where"], $body["is"]);
+    resp(200, ["exists" => is_array($row) && !empty($row)]);
+}
+
+if ($do == "monitor") {
+    if (isset($body["db"]) && isset($body["table"])) {
+        resp(200, method_exists($driver, "monitor") ? $driver::monitor((string)$body["db"], (string)$body["table"]) : []);
+    }
+
+    $out = [];
+
+    foreach ($driver::listDBs() as $dbName) {
+        foreach ($driver::listTables($dbName) as $tableName) {
+            $out[] = method_exists($driver, "monitor") ? $driver::monitor($dbName, $tableName) : ["database" => $dbName, "table" => $tableName];
+        }
+    }
+
+    resp(200, $out);
+}
+
+if ($do == "recover") {
+    test_param(["db", "table"], $body);
+    resp(200, method_exists($driver, "recoverTable") ? $driver::recoverTable((string)$body["db"], (string)$body["table"]) : ["ok" => false, "error" => "recovery_unavailable"]);
+}
+
+if ($do == "page") {
+    test_param(["db", "table"], $body);
+    resp(200, method_exists($driver, "page") ? $driver::page((string)$body["db"], (string)$body["table"], (int)($body["page"] ?? 1), (int)($body["size"] ?? 50)) : ["ok" => false, "rows" => []]);
+}
+
+if ($do == "cursor") {
+    test_param(["db", "table"], $body);
+    $cursor = isset($body["cursor"]) && (string)$body["cursor"] !== "" ? (string)$body["cursor"] : null;
+    resp(200, method_exists($driver, "cursor") ? $driver::cursor((string)$body["db"], (string)$body["table"], (int)($body["size"] ?? 100), $cursor) : ["ok" => false, "rows" => []]);
+}
+
+if ($do == "fulltext_search" || $do == "fulltext") {
+    test_param(["db", "table", "query"], $body);
+    $columns = isset($body["columns"]) && is_array($body["columns"]) ? $body["columns"] : [];
+    resp(200, method_exists($driver, "fulltext_search") ? $driver::fulltext_search((string)$body["db"], (string)$body["table"], (string)$body["query"], $columns, (int)($body["limit"] ?? 50)) : []);
+}
+
 if ($do == "query") {
     test_param(["query"], $body);
-
     $params = isset($body["params"]) && is_array($body["params"]) ? $body["params"] : [];
-
     resp(200, DB_QUERY($body["query"], $ctx, $params));
 }
 
 if ($do == "runscript") {
     test_param(["path"], $body);
-
     $params = isset($body["params"]) && is_array($body["params"]) ? $body["params"] : [];
-
     resp(200, Srv::runScript($body["path"], $params, $ctx));
 }
 

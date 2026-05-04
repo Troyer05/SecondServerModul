@@ -1,103 +1,271 @@
-# GreenQLv2 – instanzfähige Query Engine
+# GreenQLv2 – GreenQL mit Instanzen und erweiterten Storage-Befehlen
+
 ## Zweck
-`GreenQLv2` ist die instanzfähige GreenQL-Engine. Sie arbeitet mit GBDBv2, unterstützt Instanz-Kontext und eignet sich für Remote-/Multi-Tenant-Verwendung.
-## Datei und Einbindung
-- Klasse: `GreenQLv2`
-- Datei: `assets/php/inc/gbdb_framework/core/greenql_engine_v2.php`
-- Wird normalerweise über `assets/php/inc/gbdb_framework/gbdb.php` oder über `assets/php/inc/.config/_config.inc.php` geladen.
 
-## Arbeitsweise
-Die Klasse wird überwiegend statisch genutzt. Öffentliche Methoden sind die stabile API für Projektcode. Private/protected Methoden sind interne Bausteine und sollten nicht direkt aus Anwendungen heraus verwendet werden.
+`GreenQLv2` ist die instanzfähige und erweiterte Variante der GreenQL-Engine. Sie spricht GBDBv2 an, sobald eine Instanz gesetzt ist, und ergänzt Befehle für Instanzen, Indizes, Constraints, Health Checks, Snapshots und Meta-Daten.
 
-Typische Aufrufkette:
+## Instanzbefehle
 
-1. Framework-Konfiguration laden.
-2. Optional benötigte Initialisierung ausführen.
-3. Öffentliche Methode der Klasse nutzen.
-4. Rückgabewert auf Fehler/Leere prüfen.
+```gql
+SHOW INSTANCES;
+GROW INSTANCE museum_demo;
+USE INSTANCE museum_demo;
+ROOT INSTANCE museum_demo;
+DROP INSTANCE museum_demo FORCE;
+```
 
-## Öffentliche API
-| Methode | Rückgabe | Beschreibung |
-|---|---:|---|
-| `cleanName(string $name)` | `string` | Bereinigt Namen für Datenbanken, Tabellen, Felder und Instanzen. |
-| `unquote(string $value)` | `mixed` | Entfernt Quotes und wandelt einfache Werte um. |
-| `stripComments(string $script)` | `string` | Entfernt Kommentare aus einem Script. |
-| `splitCommands(string $script)` | `array` | Trennt ein Script in einzelne Befehle. |
-| `evaluateValue(string $value, array $vars = [], array $params = [])` | `mixed` | Wertet einen Wert aus. |
-| `resolveNameToken(string $token, array $vars = [])` | `string` | Löst einen Namen aus Token oder Variable auf. |
-| `parseList(string $raw, array $vars = [])` | `array` | Parst eine kommagetrennte Liste. |
-| `parseAssignments(string $raw, array $vars = [], array $params = [])` | `array` | Parst Zuweisungen. |
-| `parseWhere(string $raw, array $vars = [], array $params = [])` | `?array` | Parst WHERE-Bedingungen. |
-| `rowMatch(array $row, ?array $where)` | `bool` | Prüft, ob eine Zeile zur WHERE-Bedingung passt. |
-| `sortRows(array &$rows, ?string $field, string $dir = "ASC")` | `void` | Sortiert Zeilen. |
-| `getRows(string $db, string $table)` | `array` | Holt Tabellenzeilen aus dem aktiven Treiber. |
-| `getTableKeys(string $db, string $table)` | `array` | Holt Tabellenfelder aus dem aktiven Treiber. |
-| `selectRows(string $db, string $table, array $columns = ["*"], ?array $where = null, ?string $sortField = null, string $sortDir = "ASC", ?int $limit = null)` | `array` | Selektiert Tabellenzeilen. |
-| `stats(string $db)` | `array` | Gibt Statistiken zu einer Base zurück. |
-| `command(string $command, array &$ctx = [], array &$vars = [], array $params = [])` | `array` | Führt einen einzelnen GreenQL-Befehl aus. |
-| `run(string $script, array $ctx = [], array $params = [])` | `array` | Führt ein komplettes GreenQL-Script aus. |
+| Befehl | Zweck |
+|---|---|
+| `SHOW INSTANCES` | listet vorhandene Instanzen. |
+| `GROW INSTANCE name` | erstellt eine Instanz. |
+| `USE INSTANCE name` | setzt aktive Instanz für folgende Befehle. |
+| `ROOT INSTANCE name` | Alias/Root-Kontext für Instanz. |
+| `DROP INSTANCE name FORCE` | löscht Instanz mit Force-Option. |
 
-## Beispiele
-```php
-$result = GreenQLv2::run('
-INSTANCE kunde_a;
+## Vollständiges Setup-Beispiel
+
+```gql
+GROW INSTANCE museum_demo;
+USE INSTANCE museum_demo;
+
+GROW BASE main;
 ROOT main;
-GROW TABLE users (uid, username, email);
-SEED users WITH uid=$uid, username=$name, email=$mail;
-', [], [
-    'uid' => 'u001',
-    'name' => 'markus',
-    'mail' => 'markus@example.test'
+
+GROW TABLE objects WITH oid, title, audio, text, active;
+ALTER TABLE objects ADD COLUMN image DEFAULT "";
+ALTER TABLE objects ADD CONSTRAINT UNIQUE oid;
+INDEX objects oid;
+
+SEED objects WITH {
+    "oid":"obj_001",
+    "title":"Römische Vase",
+    "audio":"vase.mp3",
+    "text":"Beschreibung für Besucher",
+    "active":true
+};
+
+PICK * FROM objects WHERE active = TRUE SORT title ASC LIMIT 20;
+```
+
+## Erweiterte Tabellenbefehle
+
+### Constraints
+
+```gql
+ALTER TABLE users ADD CONSTRAINT UNIQUE email;
+ALTER TABLE users ADD CONSTRAINT REQUIRED username;
+SHOW CONSTRAINTS FROM users;
+ALTER TABLE users DROP CONSTRAINT UNIQUE email;
+```
+
+### Indizes
+
+```gql
+INDEX users email;
+CREATE INDEX ON users uid;
+SHOW INDEXES FROM users;
+REINDEX users;
+UNINDEX users email;
+DROP INDEX ON users uid;
+```
+
+### Health und Repair
+
+```gql
+HEALTH users;
+CHECK users;
+REPAIR users;
+```
+
+### Snapshots
+
+```gql
+SNAPSHOT users;
+```
+
+### Meta anzeigen
+
+```gql
+SHOW META FROM users;
+DESCRIBE users;
+```
+
+## Explain
+
+```gql
+EXPLAIN PICK * FROM users WHERE email = "demo@example.com" LIMIT 1;
+```
+
+Dieser Befehl ist für Diagnose gedacht. Er zeigt, wie die Query interpretiert wird und ob ein Index sinnvoll wäre bzw. verwendet werden kann.
+
+## Unterschied GreenQL vs. GreenQLv2
+
+| Bereich | GreenQL | GreenQLv2 |
+|---|---|---|
+| lokale DB | ja | ja |
+| Instanzen | eingeschränkt/kontextabhängig | zentraler Bestandteil |
+| `SHOW INSTANCES` | ja, wenn GBDBv2 vorhanden | ja |
+| Constraints/Index/Health | vorhanden, abhängig vom Stand | vollständig vorgesehen |
+| UI-Nutzung | möglich | bevorzugt für GreenQL UI v2 |
+
+## Ausführung in PHP
+
+```php
+$result = GreenQLv2::runScript("scripts/greenql/classes.gql", [
+    "uid" => "u1"
+], [
+    "instance" => "kunde_a"
 ]);
 ```
 
-## Fehlerquellen und Debugging
-- Prüfe zuerst, ob `_config.inc.php` korrekt geladen wurde.
-- Bei leeren Rückgaben immer zwischen `false`, leerem Array und nicht vorhandenem Datensatz unterscheiden.
-- Bei Datei- oder GBDB-Zugriffen Schreibrechte des Webservers prüfen.
-- Bei Remote-Aufrufen Netzwerk, URL, Auth-Key und JSON-Antwort kontrollieren.
-- In Entwicklung `Vars::__DEV__()` bzw. eigene Logs nutzen, aber produktive Secrets nie ausgeben.
+Oder über GBDBv2:
 
-## Interne Methoden
-Diese Methoden erklären die interne Struktur. Sie sind nicht als öffentliche API gedacht:
-
-- `private static db() : string` – Gibt den aktiven Datenbank-Treiber zurück.
-- `private static syncInstance(array $ctx = []) : void` – Synchronisiert den aktiven Treiber anhand des Contextes.
-- `private static useInstance(string $instance, array &$ctx = []) : bool` – Aktiviert eine GBDBv2-Instanz.
+```php
+GBDBv2::setInstance("kunde_a");
+$result = GBDBv2::query("ROOT main; PICK * FROM users LIMIT 10;");
+```
 
 ## Best Practices
-- Öffentliche Methoden bevorzugen und interne Dateipfade nicht hart im Anwendungscode duplizieren.
-- Rückgaben immer validieren, bevor sie in HTML, API-Antworten oder weitere DB-Operationen fließen.
-- Für neue Features erst Schema/Tabellen sauber anlegen und danach Daten schreiben.
-- Für produktive Systeme Backups, Schreibrechte und Authentifizierung vor dem Rollout testen.
 
-## Integration in eigene Projekte
+- In Mandantenscripten immer am Anfang `USE INSTANCE ...` setzen.
+- Für eindeutige IDs `UNIQUE` Constraints nutzen.
+- Für häufige WHERE-Spalten `INDEX` anlegen.
+- Vor Massenänderungen `SNAPSHOT` ausführen.
+- `HEALTH` und `REPAIR` in Admin-/Wartungstools einbauen.
+- In UI-Kontexten keine reservierten Systeminstanzen verwenden.
 
-Beim Einbau in neue Projekte sollte diese Komponente nicht isoliert betrachtet werden. Fast alle Framework-Klassen hängen indirekt an der zentralen Konfiguration `Vars` und an der gemeinsamen Einbindung über `_config.inc.php`. Dadurch bleibt der Anwendungscode kurz, aber Konfigurationsfehler fallen oft erst zur Laufzeit auf. Für saubere Projekte empfiehlt es sich deshalb, zuerst eine kleine Setup- oder Healthcheck-Seite anzulegen, die prüft, ob die Klasse geladen ist, ob die benötigten Pfade existieren und ob Schreib-/Leserechte stimmen.
+# Erweiterte Befehlsreferenz
 
-Ein typischer Integrationsablauf sieht so aus:
+## Struktur- und Instanzbefehle
 
-1. `_config.inc.php` laden.
-2. Benötigte Konstanten und `Vars`-Werte prüfen.
-3. Falls nötig Initialisierung ausführen.
-4. Einen einfachen Leseaufruf testen.
-5. Einen einfachen Schreibaufruf testen.
-6. Fehlerfälle testen, nicht nur den Erfolgsfall.
+```gql
+SHOW INSTANCES;
+GROW INSTANCE kunde_a;
+USE INSTANCE kunde_a;
+ROOT INSTANCE kunde_a;
+DROP INSTANCE kunde_a FORCE;
+```
 
-## Test-Checkliste
+## Base- und Tabellenbefehle
 
-- Läuft der Code lokal und auf dem Server mit derselben PHP-Version?
-- Sind alle benötigten Core-Dateien wirklich geladen?
-- Sind Rückgaben dokumentiert und werden sie im Anwendungscode geprüft?
-- Gibt es einen Test mit leerer Eingabe, ungültiger Eingabe und gültiger Eingabe?
-- Sind Dateipfade relativ zum Projekt-Root und nicht zum aktuellen Browserpfad gedacht?
-- Sind produktive Secrets aus Logs, Fehlermeldungen und Screenshots entfernt?
-- Funktioniert der Ablauf nach einem frischen Upload ohne manuelles Nachbessern der Rechte?
+```gql
+GROW BASE main;
+DROP BASE main;
+ROOT main;
+SHOW BASES;
+SHOW TABLES IN main;
+GROW TABLE users WITH uid, username, email;
+ALTER TABLE users ADD COLUMN last_login DEFAULT "";
+DROP TABLE users;
+```
 
-## Wartung und Erweiterung
+## Storage- und Diagnosebefehle
 
-Wenn diese Klasse erweitert wird, sollte jede neue öffentliche Methode sofort in dieser Dokumentation auftauchen. Bei Klassen, die mit GBDB arbeiten, muss außerdem geprüft werden, ob neue Tabellen oder Spalten in `schema.json` bzw. `schema_v2.json` berücksichtigt werden müssen. Bei Klassen, die Remote-Requests ausführen, sollten Fehlermeldungen immer so formuliert werden, dass Entwickler das Problem finden können, ohne dabei Auth-Tokens oder API-Keys offenzulegen.
+```gql
+SHOW META FROM users;
+SHOW INDEXES FROM users;
+SHOW CONSTRAINTS FROM users;
+HEALTH users;
+REPAIR users;
+SNAPSHOT users;
+PACK users;
+```
 
-## Praktische Hinweise für andere Entwickler
+`PACK` führt eine Kompaktierung aus. Das ist sinnvoll, wenn viele Append-/WAL-Operationen aufgelaufen sind.
 
-Dieses Framework folgt bewusst einem sehr direkten PHP-Stil. Viele Methoden sind statisch und dadurch einfach aufzurufen. Der Nachteil ist, dass falsche globale Konfigurationen schneller Auswirkungen auf mehrere Klassen haben. Andere Entwickler sollten deshalb nicht nur die einzelne Methode lesen, sondern auch die umgebenden Dateien `ENV.php`, `_config.inc.php` und bei Remote-Funktionen `backend.php` prüfen.
+## Query-Diagnose
+
+```gql
+EXPLAIN PICK * FROM users WHERE email = "demo@example.com" LIMIT 1;
+```
+
+`EXPLAIN` ist hilfreich, wenn eine Abfrage langsamer ist als erwartet oder wenn geprüft werden soll, ob ein Index für eine WHERE-Spalte sinnvoll ist.
+
+## Produktives Mandanten-Setup
+
+```gql
+GROW INSTANCE kunde_a;
+USE INSTANCE kunde_a;
+GROW BASE main;
+ROOT main;
+
+GROW TABLE settings WITH key, value, type;
+ALTER TABLE settings ADD CONSTRAINT UNIQUE key;
+INDEX settings key;
+
+SEED settings WITH {"key":"site_name","value":"Demo Museum","type":"string"};
+SNAPSHOT settings;
+HEALTH settings;
+```
+
+## Warum GreenQLv2 für UI und Remote bevorzugt ist
+
+GreenQLv2 kann den Instanzkontext direkt im Script ausdrücken. Dadurch ist ein Script selbstbeschreibender:
+
+```gql
+USE INSTANCE kunde_a;
+ROOT main;
+PICK * FROM objects;
+```
+
+Ohne diese Zeile müsste der PHP-/Remote-Kontext korrekt gesetzt sein. Mit `USE INSTANCE` ist das Script robuster und leichter testbar.
+
+## Sicherheitsregeln
+
+- `DROP INSTANCE ... FORCE` nur in Admin-/Wartungskontexten erlauben.
+- In der UI reservierte Instanzen blockieren.
+- Userinput nicht direkt als Instanz-, Base- oder Tabellenname verwenden.
+- Bei Public APIs GreenQLv2 nur mit klaren Gates aktivieren.
+- Vor `RESHAPE`, `ERASE`, `DROP` oder Massenoperationen Snapshots erzeugen.
+
+## Runtime-Funktionen für Advanced-Engine-Features
+
+GreenQL kann die neuen Engine-Funktionen nicht nur als Befehl, sondern auch als Runtime-Ausdruck verwenden. Das ist praktisch, wenn Ergebnisse in Variablen gespeichert, geprüft oder weiterverarbeitet werden sollen.
+
+```gql
+DECLARE _hasInstance = instance_exists("default");
+DECLARE _hasBase = base_exists("main");
+DECLARE _hasUsers = table_exists("main", "users");
+DECLARE _hasMax = data_exists("main", "users", ["email": "max@example.de"]);
+
+DECLARE _monitor = monitor("main", "users");
+DECLARE _recovery = recover("main", "users");
+DECLARE _page = page("main", "users", 1, 50);
+DECLARE _cursor = cursor("main", "users", 100);
+DECLARE _hits = fulltext_search("main", "users", "Max Muster", ["username", "email"], 25);
+
+OUTPUT(_monitor);
+OUTPUT(_hits);
+```
+
+Die Funktionen unterstützen bei GBDBv2 zusätzlich Instanzargumente, wenn diese vorne übergeben werden:
+
+```gql
+DECLARE _hasBase = base_exists("kunde1", "main");
+DECLARE _hasUsers = table_exists("kunde1", "main", "users");
+DECLARE _page = page("kunde1", "main", "users", 1, 50);
+DECLARE _hits = fulltext_search("kunde1", "main", "users", "Max", ["username"], 10);
+```
+
+## GreenQL ENV-Werte
+
+Sensible Script-Werte können über `ENV("key")` gelesen werden. Die Werte liegen nicht in einer normalen Text-`.env`, sondern in einer PHP-Datei:
+
+```php
+// scripts/greenql/.ENV/.env.php
+<?php
+
+$GREENQL_ENV = [
+    "api_auth" => "dein-geheimer-api-token",
+];
+
+return $GREENQL_ENV;
+```
+
+Verwendung im GreenQL-Script:
+
+```gql
+DECLARE _api_auth = ENV("api_auth");
+```
+
+Der ENV-Key darf Buchstaben, Zahlen, `_`, `-` und `.` enthalten. Fehlt der Key, gibt `ENV()` `null` zurück. Die Datei wird serverseitig per PHP geladen und ist damit nicht als Klartext-Datei für den Browser gedacht. Unterstützt werden `return [...]`, `$GREENQL_ENV`, `$GQL_ENV`, `$ENV` oder einfache PHP-Variablen wie `$api_auth`. Zusätzlich liegt in `scripts/greenql/.ENV/` eine `.htaccess`, die direkten Zugriff bei Apache blockiert.

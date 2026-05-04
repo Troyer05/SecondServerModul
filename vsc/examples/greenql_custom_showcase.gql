@@ -1,0 +1,199 @@
+# ============================================================
+# greenQL Language Support 1.3.0 Showcase
+# ============================================================
+
+DECLARE $APP_NAME = "greenQL";
+DECLARE _TITLE = "greenQL Full Highlighting Showcase";
+DECALRE _TYPO_ALIAS = param("typo_alias");
+DELACE _LEGACY_ALIAS = "legacy";
+DECLARE _NOW = NOW;
+DECLARE _BOOL = TRUE;
+DECLARE _NIL = NULL;
+
+SET_LOGFILE("logs/greenql-showcase.log");
+LOG(_TITLE);
+OUTPUT("Output 1");
+OUTPUT("Output 2");
+MSG "message";
+
+IF (_BOOL == TRUE) {
+    OUTPUT(_TITLE);
+} ELSE {
+    ERROR MSG "condition failed";
+}
+
+FOR (_item; _i FROM _items) {
+    LOG(_item);
+}
+
+MAP_OBJECT(_config AS _key, _value) {
+    OUTPUT(_key);
+    LOG(_value);
+}
+
+F restartable(_counter) {
+    IF (_counter < 1) {
+        this_f.restart();
+    }
+    BACK _counter;
+}
+
+CLASS DemoService {
+    PRIV DECLARE _name = "DemoService";
+
+    PUB F boot(_input) {
+        BACK this._name;
+    }
+}
+
+CALL DemoService/boot(_TITLE);
+CALL restartable(0);
+
+FILE.INCLUDE "scripts/includes/shared.gql";
+FILE.RUN "scripts/jobs/worker.gql" WITH ["title": _TITLE];
+FILE.BACK _TITLE;
+
+GROW INSTANCE demo_instance;
+USE INSTANCE demo_instance;
+ROOT INSTANCE demo_instance;
+SHOW INSTANCES;
+EXISTS INSTANCE demo_instance;
+DROP INSTANCE old_instance FORCE;
+
+GROW BASE main;
+ROOT main;
+SHOW BASES;
+EXISTS BASE main;
+DROP BASE trash;
+
+GROW TABLE users (uid, username, email, active);
+BRANCH users;
+SHOW TABLES;
+EXISTS TABLE users;
+ALTER TABLE users ADD COLUMN created_at DEFAULT NOW;
+DESCRIBE users;
+DROP TABLE old_users;
+
+SEED users WITH uid=uni_random(), username="admin", email="root@example.test", active=TRUE;
+PICK * FROM users WHERE active = TRUE SORT uid ASC LIMIT 10;
+PICK * FROM users WHERE username ~= "adm" SORT uid DESC MAX 5;
+RESHAPE users WITH active=FALSE WHERE uid = _uid;
+EXISTS DATA IN users WHERE uid = _uid;
+ERASE FROM users WHERE uid = _uid;
+DELETE FROM users WHERE active = FALSE;
+
+BEGIN TRANSACTION;
+SEED audit WITH aid=spark_id(), action="test", created_at=NOW;
+COMMIT;
+ROLLBACK;
+TRANSACTION;
+
+PACK users;
+PEEK users;
+CHECK users;
+HEALTH;
+REPAIR users;
+SNAPSHOT main;
+META users WITH owner="greenbucket";
+EXPLAIN PICK * FROM users WHERE uid = _uid;
+
+INDEX users (uid);
+INDEXES users;
+UNINDEX users (uid);
+REINDEX users;
+CONSTRAINT users.uid UNIQUE;
+CONSTRAINT users.email REQUIRED;
+CONSTRAINTS users;
+
+DECLARE _hash1 = hash(_TITLE);
+DECLARE _hash2 = hash_sha256(_TITLE);
+DECLARE _hash3 = hash_sha512(_TITLE);
+DECLARE _hash4 = hash_md5(_TITLE);
+DECLARE _hash5 = hash_adler32(_TITLE);
+DECLARE _hash6 = hash_crc32(_TITLE);
+DECLARE _len = len(_TITLE);
+DECLARE _api = fetch_api(_url, _body, _headers);
+DECLARE _api2 = api_fetch(_url, _body, _headers);
+DECLARE _api3 = call_api(_url, _body, _headers);
+DECLARE _id1 = uni_random();
+DECLARE _id2 = spark_id();
+DECLARE _id3 = fresh_id();
+
+DECLARE _rows = get_data("main", "users");
+DECLARE _rows2 = fetch_data("main", "users");
+DECLARE _rows3 = fetch("main", "users");
+add_data("main", "users", _row);
+plant_data("main", "users", _row);
+seed_data("main", "users", _row);
+editData("main", "users", _row);
+edit_data("main", "users", _row);
+reshape_data("main", "users", _row);
+delete_data("main", "users", _uid);
+erase_data("main", "users", _uid);
+delete_data_recursive("main", "users", _uid);
+count_data("main", "users");
+tally_data("main", "users");
+last_added("main", "users");
+last_data("main", "users");
+
+get_instances();
+instances();
+get_bases("demo_instance");
+bases("demo_instance");
+get_tables("demo_instance", "main");
+tables("demo_instance", "main");
+new_column("main", "users", "last_login");
+sprout_column("main", "users", "last_seen");
+delete_column("main", "users", "last_seen");
+prune_column("main", "users", "last_login");
+delete_instance("old");
+drop_instance("old");
+delete_base("trash");
+drop_base("trash");
+delete_table("main", "trash");
+drop_table("main", "trash");
+rename_instance("old", "new");
+rename_base("old", "new");
+rename_table("main", "old", "new");
+transfer_data("main", "users", "backup", "users");
+copy_data("main", "users", "backup", "users");
+transfer_data_delete("main", "users", "archive", "users");
+move_data("main", "users", "archive", "users");
+set_data_readonly("main", "users", _uid, TRUE);
+lock_data("main", "users", _uid, TRUE);
+
+CLEAR_LOG();
+DELETE_LOG_FILE();
+END_PROC;
+
+# Advanced GBDB Engine
+MONITOR;
+MONITOR main.users;
+RECOVER main.users;
+PAGE main.users PAGE 1 SIZE 50;
+CURSOR main.users SIZE 100;
+FULLTEXT main.users SEARCH "Max Muster" LIMIT 25;
+
+# ============================================================
+# Advanced Runtime Funktionen
+# ============================================================
+DECLARE _instanceExists = instance_exists("default");
+DECLARE _baseExists = base_exists("main");
+DECLARE _tableExists = table_exists("main", "users");
+DECLARE _dataExists = data_exists("main", "users", ["id": 1]);
+DECLARE _monitorFn = monitor("main", "users");
+DECLARE _pageFn = page("main", "users", 1, 10);
+DECLARE _cursorFn = cursor("main", "users", 10);
+DECLARE _fulltextFn = fulltext_search("main", "users", "Max", ["username", "email"], 10);
+OUTPUT(_instanceExists);
+OUTPUT(_baseExists);
+OUTPUT(_tableExists);
+OUTPUT(_dataExists);
+OUTPUT(_monitorFn);
+OUTPUT(_pageFn);
+OUTPUT(_cursorFn);
+OUTPUT(_fulltextFn);
+
+# ENV Runtime-Funktion
+# Liest aus scripts/greenql/.ENV/.env.php
+DECLARE _env_api_auth = ENV("api_auth");

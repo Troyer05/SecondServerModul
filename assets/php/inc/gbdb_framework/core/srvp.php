@@ -659,4 +659,153 @@ class SrvP {
             "do" => "srv_jobs"
         ], $ctx));
     }
+
+    /**
+     * Prüft, ob eine Remote-Instanz existiert.
+     * @param string $instance Instanzname.
+     * @return array Backend-Antwort.
+     */
+    public static function instance_exists(string $instance): array {
+        return self::request(self::payload([
+            "do" => "instance_exists",
+            "instance" => $instance
+        ]));
+    }
+
+    /**
+     * Prüft, ob eine Remote-Base existiert.
+     * @param string $db Base.
+     * @param array $ctx Kontext.
+     * @return array Backend-Antwort.
+     */
+    public static function base_exists(string $db, array $ctx = []): array {
+        return self::request(self::payload([
+            "do" => "base_exists",
+            "db" => $db
+        ], $ctx));
+    }
+
+    /**
+     * Prüft, ob eine Remote-Tabelle existiert.
+     * @param string $db Base.
+     * @param string $table Tabelle.
+     * @param array $ctx Kontext.
+     * @return array Backend-Antwort.
+     */
+    public static function table_exists(string $db, string $table, array $ctx = []): array {
+        return self::request(self::payload([
+            "do" => "table_exists",
+            "db" => $db,
+            "table" => $table
+        ], $ctx));
+    }
+
+    /**
+     * Prüft, ob Remote-Daten anhand eines Filters existieren.
+     * @param string $db Base.
+     * @param string $table Tabelle.
+     * @param string $where Spalte.
+     * @param mixed $is Vergleichswert.
+     * @param array $ctx Kontext.
+     * @return array Backend-Antwort.
+     */
+    public static function data_exists(string $db, string $table, string $where, mixed $is, array $ctx = []): array {
+        return self::request(self::payload([
+            "do" => "data_exists",
+            "db" => $db,
+            "table" => $table,
+            "where" => $where,
+            "is" => $is
+        ], $ctx));
+    }
+
+    /**
+     * Liest Remote-Monitoring-Daten.
+     * @param string $db Base.
+     * @param string $table Tabelle.
+     * @param array $ctx Kontext.
+     * @return array Backend-Antwort.
+     */
+    public static function monitor(string $db = "", string $table = "", array $ctx = []): array {
+        $body = ["do" => "monitor"];
+        if ($db !== "") $body["db"] = $db;
+        if ($table !== "") $body["table"] = $table;
+        return self::request(self::payload($body, $ctx));
+    }
+
+    /**
+     * Führt Remote-Recovery für eine Tabelle aus.
+     * @param string $db Base.
+     * @param string $table Tabelle.
+     * @param array $ctx Kontext.
+     * @return array Backend-Antwort.
+     */
+    public static function recover(string $db, string $table, array $ctx = []): array {
+        return self::request(self::payload([
+            "do" => "recover",
+            "db" => $db,
+            "table" => $table
+        ], $ctx));
+    }
+
+    /**
+     * Lädt eine Remote-Page.
+     * @param string $db Base.
+     * @param string $table Tabelle.
+     * @param int $page Seite ab 1.
+     * @param int $size Seitengröße.
+     * @param array $ctx Kontext.
+     * @return array Backend-Antwort.
+     */
+    public static function page(string $db, string $table, int $page = 1, int $size = 50, array $ctx = []): array {
+        return self::request(self::payload([
+            "do" => "page",
+            "db" => $db,
+            "table" => $table,
+            "page" => $page,
+            "size" => $size
+        ], $ctx));
+    }
+
+    /**
+     * Lädt einen Remote-Cursor.
+     * @param string $db Base.
+     * @param string $table Tabelle.
+     * @param int $size Chunk-Größe.
+     * @param string|null $cursor Cursor-Token.
+     * @param array $ctx Kontext.
+     * @return array Backend-Antwort.
+     */
+    public static function cursor(string $db, string $table, int $size = 100, ?string $cursor = null, array $ctx = []): array {
+        $body = [
+            "do" => "cursor",
+            "db" => $db,
+            "table" => $table,
+            "size" => $size
+        ];
+        if ($cursor !== null && $cursor !== "") $body["cursor"] = $cursor;
+        return self::request(self::payload($body, $ctx));
+    }
+
+    /**
+     * Führt Remote-Volltextsuche aus.
+     * @param string $db Base.
+     * @param string $table Tabelle.
+     * @param string $query Suchtext.
+     * @param array $columns Spaltenfilter.
+     * @param int $limit Maximale Treffer.
+     * @param array $ctx Kontext.
+     * @return array Backend-Antwort.
+     */
+    public static function fulltext_search(string $db, string $table, string $query, array $columns = [], int $limit = 50, array $ctx = []): array {
+        return self::request(self::payload([
+            "do" => "fulltext_search",
+            "db" => $db,
+            "table" => $table,
+            "query" => $query,
+            "columns" => $columns,
+            "limit" => $limit
+        ], $ctx));
+    }
+
 }

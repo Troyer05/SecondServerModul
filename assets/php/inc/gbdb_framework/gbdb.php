@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/ENV.php";
 
-/**
- * Lädt alle PHP-Dateien in einem Ordner
- */
 function gbdb_loadLocal(string $folder): void {
 
     $path = rtrim($folder, '/\\');
@@ -26,19 +23,7 @@ function gbdb_loadLocal(string $folder): void {
     }
 }
 
-
-// === KORREKTE PFADBASIS ===
-// gbdb.php befindet sich in: /assets/php/inc/gbdb_framework/
 $BASE = __DIR__;
 
-
-// === CORE LADEN ===
 gbdb_loadLocal($BASE . "/core");
-
-
-// === PLUGINS LADEN ===
 gbdb_loadLocal($BASE . "/plugins");
-
-
-// === GBDB SYSTEM LADEN ===
-// Falls du gbdb_sys.php etc. hast, wird das automatisch geladen.

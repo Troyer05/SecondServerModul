@@ -18,12 +18,10 @@ class PAPI {
         "gbdb_create_database" => "gbdb_create_database",
         "gbdb_delete_database" => "gbdb_delete_database",
         "gbdb_delete_all" => "gbdb_delete_all",
-
         "gbdb_tables" => "gbdb_tables",
         "gbdb_create_table" => "gbdb_create_table",
         "gbdb_delete_table" => "gbdb_delete_table",
         "gbdb_add_column" => "gbdb_add_column",
-
         "gbdb_schema" => "gbdb_schema",
         "gbdb_keys" => "gbdb_schema",
         "gbdb_data" => "gbdb_data",
@@ -34,33 +32,26 @@ class PAPI {
         "gbdb_delete" => "gbdb_delete",
         "gbdb_next_id" => "gbdb_next_id",
         "gbdb_compact" => "gbdb_compact",
-
         "gbdb_query" => "gbdb_query",
         "gbdb_run_script" => "gbdb_run_script",
         "greenql" => "gbdb_query",
-
-        // alte Aliases
         "get_gbdb_databases" => "gbdb_databases",
         "get_gbdb_tables" => "gbdb_tables",
         "get_gbdb_data" => "gbdb_data",
 
-        // GBDB v2 Instance
+        // GBDB v2
         "gbdbv2_instance" => "gbdbv2_instance",
         "gbdbv2_instances" => "gbdbv2_instances",
         "gbdbv2_create_instance" => "gbdbv2_create_instance",
         "gbdbv2_delete_instance" => "gbdbv2_delete_instance",
-
-        // GBDB v2
         "gbdbv2_databases" => "gbdbv2_databases",
         "gbdbv2_create_database" => "gbdbv2_create_database",
         "gbdbv2_delete_database" => "gbdbv2_delete_database",
         "gbdbv2_delete_all" => "gbdbv2_delete_all",
-
         "gbdbv2_tables" => "gbdbv2_tables",
         "gbdbv2_create_table" => "gbdbv2_create_table",
         "gbdbv2_delete_table" => "gbdbv2_delete_table",
         "gbdbv2_add_column" => "gbdbv2_add_column",
-
         "gbdbv2_schema" => "gbdbv2_schema",
         "gbdbv2_keys" => "gbdbv2_schema",
         "gbdbv2_data" => "gbdbv2_data",
@@ -71,7 +62,6 @@ class PAPI {
         "gbdbv2_delete" => "gbdbv2_delete",
         "gbdbv2_next_id" => "gbdbv2_next_id",
         "gbdbv2_compact" => "gbdbv2_compact",
-
         "gbdbv2_query" => "gbdbv2_query",
         "gbdbv2_run_script" => "gbdbv2_run_script",
         "greenqlv2" => "gbdbv2_query"

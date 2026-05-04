@@ -122,6 +122,7 @@ class Srv {
      */
     public static function getJob(int $id, array $ctx = []) {
         self::ensureTables($ctx);
+
         $driver = self::driver($ctx);
         $job = $driver::getData("main", "srv_jobs", true, "id", (string)$id);
 
@@ -310,6 +311,7 @@ class Srv {
      */
     public static function runOne(int $id, array $ctx = []): array {
         self::ensureTables($ctx);
+
         $driver = self::driver($ctx);
         $job = self::getJob($id, $ctx);
 
@@ -342,9 +344,7 @@ class Srv {
 
         try {
             self::log($id, "debug", "Starte Action '$action'", $payload);
-
             $result = $module->$action($payload, $job);
-
             self::log($id, "success", "Job #$id erfolgreich beendet", $result);
 
             $driver::editData("main", "srv_jobs", "id", (string)$id, [

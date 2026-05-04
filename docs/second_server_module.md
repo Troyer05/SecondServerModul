@@ -1,107 +1,110 @@
-# SecondServerModul – ausführliche Dokumentation
+# SecondServerModul – Remote-Architektur
 
 ## Zweck
 
-Das SecondServerModul erlaubt es, ein Projekt in zwei Ebenen zu betreiben:
+Das SecondServerModul erlaubt einem Server, sicher Aktionen auf einem zweiten Server auszuführen. Typische Gründe:
 
-- **Server 1 / Client-Seite**: Enthält die Anwendung, die `SrvP` nutzt.
-- **Server 2 / Backend-Seite**: Enthält `backend.php`, `Srv`, GBDB/GBDBv2 und optionale Module.
+- Daten liegen auf einem getrennten Server.
+- Ein Backend soll mehrere Frontends bedienen.
+- Jobs sollen zentral verarbeitet werden.
+- Auth- oder GBDBv2-Funktionen sollen remote nutzbar sein.
 
-Dadurch kann eine Anwendung Daten, Jobs, Auth oder GreenQL-Scripte remote ausführen, ohne dass die Frontend-Seite direkten Dateisystemzugriff auf die Backend-Daten braucht.
+## Rollen
 
-## Beteiligte Dateien
+| Rolle | Klasse/Datei | Aufgabe |
+|---|---|---|
+| Client-Server | `SrvP` | baut JSON-Requests, holt Einmal-Token, sendet Aktionen. |
+| Ziel-Server | `backend.php` | nimmt Requests entgegen, prüft Auth, dispatcht Aktionen. |
+| Backend-Service | `Srv` | führt Jobs, Auth, Scripte und Module aus. |
+| Hilfsfunktionen | `functions.php` | Response, Auth, Context, DB-Dispatch. |
 
-```text
-assets/php/inc/gbdb_framework/core/srvp.php   Client-Klasse
-backend.php                                   JSON-Endpunkt auf Server 2
-assets/php/inc/Srv.php                        Backend-Service-Klasse
-functions.php                                 Backend-Helfer, DB-Routing, Tokenlogik
-assets/php/srv_modules/                       optionale Job-Module
-```
+## Request-Ablauf
 
-## Authentifizierungsablauf
+1. `SrvP` ermittelt Endpoint aus `Vars::srvp_ip()` und `Vars::srvp_ssl()`.
+2. `SrvP` fordert mit `do=gtoken` und statischer Auth einen Einmal-Token an.
+3. Backend erzeugt/prüft Token in `assets/DB/framework_temp/_srvtkns.cry`.
+4. `SrvP` sendet eigentlichen Request mit `sauth`, `token`, `do` und optional `ctx`.
+5. `backend.php` dispatcht auf GBDB, GBDBv2, Auth oder Srv.
+6. Response kommt als JSON-Envelope zurück.
 
-1. `SrvP` baut die Backend-URL aus `Vars::srvp_ip()` und `Vars::srvp_ssl()`.
-2. `SrvP` fordert mit `do=gtoken` und Hash des Static-Keys ein Einmal-Token an.
-3. Das Backend erzeugt ein Token und speichert es verschlüsselt/geschützt in `_srvtkns.cry`.
-4. `SrvP` sendet den eigentlichen Request mit `sauth` und `token`.
-5. `backend.php` prüft Methode, Static-Key und Token.
-6. Das Token wird verbraucht und kann nicht erneut genutzt werden.
+## Context
 
-## Kontext und Instanzen
-
-Für GBDBv2 kann ein Kontext übergeben werden:
-
-```php
-SrvP::setInstance('kunde_a');
-SrvP::createDatabase('main');
-```
-
-Alternativ pro Aufruf:
+Der Context steuert z. B. Instanz oder Treiber:
 
 ```php
-SrvP::getData('main', 'users', false, '', '', ['instance' => 'kunde_a']);
-```
-
-## Unterstützte Backend-Aktionen
-
-- `driver` – aktiven Treiber und Instanzstatus prüfen.
-- `instances`, `create_instance`, `delete_instance` – GBDBv2-Instanzen verwalten.
-- `bases`, `tables`, `create_base`, `delete_base`, `create_table`, `delete_table` – Struktur verwalten.
-- `get`, `put`, `edit`, `delete`, `keys` – Datenoperationen.
-- `query` – GreenQL/GreenQLv2 ausführen.
-- `runscript` – Script auf Backend-Seite lesen und ausführen.
-- `auth` – Remote-Auth-Funktionen nutzen.
-- `srv_enqueue`, `srv_run_one`, `srv_status`, `srv_logs`, `srv_jobs` – Job-System nutzen.
-
-## Beispiel: Remote-Tabelle anlegen
-
-```php
-include 'assets/php/inc/.config/_config.inc.php';
-
-SrvP::setInstance('kunde_a');
-SrvP::createDatabase('main');
-SrvP::createTable('main', 'logs', ['type', 'message', 'created']);
-SrvP::insertData('main', 'logs', [
-    'type' => 'info',
-    'message' => 'remote write ok',
-    'created' => date('Y-m-d H:i:s')
+SrvP::setContext([
+    "instance" => "kunde_a",
+    "driver" => "GBDBv2"
 ]);
 ```
 
-## Beispiel: Script remote ausführen
+Oder kurz:
 
 ```php
-$result = SrvP::runScript('scripts/greenql/makeUser.gql', [
-    'uid' => 'u001',
-    'username' => 'markus'
-]);
+SrvP::setInstance("kunde_a");
 ```
 
-Wichtig: Die Datei muss auf dem Backend-Server existieren. Der Client übermittelt nur den Pfad. `Srv::runScript()` prüft die Datei backendseitig.
+## Beispiel: Remote Daten lesen
+
+```php
+SrvP::setInstance("kunde_a");
+$users = SrvP::getData("main", "users");
+```
+
+## Beispiel: Remote GreenQL
+
+```php
+$result = SrvP::query('
+    ROOT main;
+    PICK * FROM users LIMIT 10;
+', ["instance" => "kunde_a"]);
+```
+
+## Beispiel: Remote Auth
+
+```php
+$login = SrvP::auth_login("admin", "password");
+if (($login["ok"] ?? false) === true) {
+    $jwt = $login["data"]["jwt"] ?? "";
+}
+```
 
 ## Sicherheit
 
-- Static-Key niemals kurz oder erratbar wählen.
-- `backend.php` nicht öffentlich dokumentieren.
-- Logs nicht mit Secrets befüllen.
-- Script-Ausführung nur mit erlaubten Pfaden/geschützter UI anbieten.
-- Bei Multi-Tenant-Nutzung immer Kontext/Instanz prüfen.
+- `Vars::srvp_static_key()` muss auf beiden Servern übereinstimmen.
+- Einmal-Tokens sind kurzlebig und sollten nicht geloggt werden.
+- HTTPS ist empfohlen, wenn stabil nutzbar.
+- Backend-Datei nicht öffentlich dokumentieren, wenn nicht nötig.
+- Logs dürfen keine Secrets enthalten.
 
-## Debugging
+## Advanced-GBDB Remote-Funktionen
 
-### `Empty response from backend`
+SrvP/Backend unterstützen jetzt auch die neuen Advanced-Funktionen für GBDB und GBDBv2. Bei GBDBv2 kann wie gewohnt ein Kontext mit `SrvP::setInstance("kunde1")` oder über den letzten `$ctx`-Parameter übergeben werden.
 
-Backend nicht erreichbar, PHP-Fehler, falsche URL oder falsches Protokoll.
+```php
+SrvP::instance_exists("kunde1");
+SrvP::base_exists("main");
+SrvP::table_exists("main", "users");
+SrvP::data_exists("main", "users", "email", "max@example.de");
 
-### `Static auth failed`
+SrvP::monitor();
+SrvP::monitor("main", "users");
+SrvP::recover("main", "users");
+SrvP::page("main", "users", 1, 50);
+SrvP::cursor("main", "users", 100);
+SrvP::fulltext_search("main", "users", "Max Muster", ["username", "email"], 25);
+```
 
-`Vars::srvp_static_key()` unterscheidet sich zwischen Client und Backend.
+Backend-`do`-Actions:
 
-### `Token auth failed`
+- `instance_exists`
+- `base_exists`
+- `table_exists`
+- `data_exists`
+- `monitor`
+- `recover`
+- `page`
+- `cursor`
+- `fulltext_search`
 
-Token-Datei nicht schreibbar, Token wurde schon verbraucht oder Systemzeit/Request-Ablauf ist fehlerhaft.
-
-### `Script not found on backend`
-
-Pfad existiert auf Client-Seite vielleicht, aber nicht auf Server 2. Scriptpfade immer aus Sicht des Backends prüfen.
+`fulltext` bleibt als Backend-Kompatibilitätsalias erhalten. Die bevorzugte neue PHP-Methode ist `fulltext_search`.

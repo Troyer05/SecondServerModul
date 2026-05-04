@@ -1,10 +1,14 @@
 <?php
 /**
- * @author
- * @uses 
+ * @author Fullname <Email>
+ * @uses (List of used Classes from GBDB)
  * 
- * Describe Class
+ * Describe Class here
  */
 
-class Template {}
+class Template {
+    public static function demo(): string {
+        return "Hello from GBDB-Plugins! :)";
+    }
+}
 ?>

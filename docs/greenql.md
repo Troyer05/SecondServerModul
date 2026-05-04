@@ -1,92 +1,504 @@
-# GreenQL
+# GreenQL – eigene Script- und Query-Sprache
+
 ## Zweck
-`GreenQL` ist die kleine Query-Sprache für GBDB. Sie ermöglicht strukturierte Operationen wie ROOT, GROW, SEED, SELECT, EDIT und DELETE in Scriptform.
-## Datei und Einbindung
-- Klasse: `GreenQL`
-- Datei: `assets/php/inc/gbdb_framework/core/greenql_engine.php`
-- Wird normalerweise über `assets/php/inc/gbdb_framework/gbdb.php` oder über `assets/php/inc/.config/_config.inc.php` geladen.
 
-## Arbeitsweise
-Die Klasse wird überwiegend statisch genutzt. Öffentliche Methoden sind die stabile API für Projektcode. Private/protected Methoden sind interne Bausteine und sollten nicht direkt aus Anwendungen heraus verwendet werden.
+GreenQL ist die eigene Sprache des Frameworks. Sie verbindet Datenbankbefehle mit Script-Features. Dadurch können Setup-Scripte, Wartungsjobs, Imports, Tests und Admin-Aktionen geschrieben werden, ohne direkt PHP-Code zu ändern.
 
-Typische Aufrufkette:
+GreenQL wird über `GreenQL`, `GBDB::query()` oder `GBDB::runScript()` ausgeführt.
 
-1. Framework-Konfiguration laden.
-2. Optional benötigte Initialisierung ausführen.
-3. Öffentliche Methode der Klasse nutzen.
-4. Rückgabewert auf Fehler/Leere prüfen.
+## Grundprinzip
 
-## Öffentliche API
-| Methode | Rückgabe | Beschreibung |
-|---|---:|---|
-| `cleanName(string $name)` | `string` | Kapselt die Fachlogik für `cleanName()` innerhalb dieser Klasse. |
-| `unquote(string $value)` | `mixed` | Kapselt die Fachlogik für `unquote()` innerhalb dieser Klasse. |
-| `stripComments(string $script)` | `string` | Kapselt die Fachlogik für `stripComments()` innerhalb dieser Klasse. |
-| `splitCommands(string $script)` | `array` | Kapselt die Fachlogik für `splitCommands()` innerhalb dieser Klasse. |
-| `evaluateValue(string $value, array $vars = [], array $params = [])` | `mixed` | Kapselt die Fachlogik für `evaluateValue()` innerhalb dieser Klasse. |
-| `resolveNameToken(string $token, array $vars = [])` | `string` | Kapselt die Fachlogik für `resolveNameToken()` innerhalb dieser Klasse. |
-| `parseList(string $raw, array $vars = [])` | `array` | Kapselt die Fachlogik für `parseList()` innerhalb dieser Klasse. |
-| `parseAssignments(string $raw, array $vars = [], array $params = [])` | `array` | Kapselt die Fachlogik für `parseAssignments()` innerhalb dieser Klasse. |
-| `parseWhere(string $raw, array $vars = [], array $params = [])` | `?array` | Kapselt die Fachlogik für `parseWhere()` innerhalb dieser Klasse. |
-| `rowMatch(array $row, ?array $where)` | `bool` | Kapselt die Fachlogik für `rowMatch()` innerhalb dieser Klasse. |
-| `sortRows(array &$rows, ?string $field, string $dir = 'ASC')` | `void` | Kapselt die Fachlogik für `sortRows()` innerhalb dieser Klasse. |
-| `getRows(string $db, string $table)` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `getTableKeys(string $db, string $table)` | `array` | Liest Daten aus der jeweiligen Quelle und gibt sie strukturiert zurück. |
-| `selectRows(string $db, string $table, array $columns = ['*'], ?array $where = null, ?string $sortField = null, string $sortDir = 'ASC', ?int $limit = null)` | `array` | Kapselt die Fachlogik für `selectRows()` innerhalb dieser Klasse. |
-| `stats(string $db)` | `array` | Kapselt die Fachlogik für `stats()` innerhalb dieser Klasse. |
-| `command(string $command, array &$ctx = [], array &$vars = [], array $params = [])` | `array` | Kapselt die Fachlogik für `command()` innerhalb dieser Klasse. |
-| `run(string $script, array $ctx = [], array $params = [])` | `array` | Führt ein Script, eine Query oder einen Job aus. |
+Ein GreenQL-Script besteht aus Befehlen. Befehle enden mit `;`, außer Blockbefehle mit `{ ... }` werden als kompletter Block erkannt.
 
-## Beispiele
-```php
-$result = GBDB::query('
+```gql
+GROW BASE main;
 ROOT main;
-GROW TABLE users (uid, username, email);
-SEED users WITH uid="u001", username="markus", email="markus@example.test";
-SELECT * FROM users WHERE uid="u001";
-');
+GROW TABLE users WITH uid, username, email, active;
+SEED users WITH {"uid":"u1","username":"admin","email":"admin@example.com","active":true};
+PICK * FROM users;
 ```
 
-## Fehlerquellen und Debugging
-- Prüfe zuerst, ob `_config.inc.php` korrekt geladen wurde.
-- Bei leeren Rückgaben immer zwischen `false`, leerem Array und nicht vorhandenem Datensatz unterscheiden.
-- Bei Datei- oder GBDB-Zugriffen Schreibrechte des Webservers prüfen.
-- Bei Remote-Aufrufen Netzwerk, URL, Auth-Key und JSON-Antwort kontrollieren.
-- In Entwicklung `Vars::__DEV__()` bzw. eigene Logs nutzen, aber produktive Secrets nie ausgeben.
+## Kommentare
+
+```gql
+# Kommentar
+// Kommentar
+-- Kommentar
+```
+
+Kommentare innerhalb von Strings bleiben erhalten.
+
+## Variablen und Konstanten
+
+Normale Variablen beginnen mit `_`. Konstanten beginnen mit `$` und sollen nicht überschrieben werden.
+
+```gql
+DECLARE _name = "MuseumQR";
+DECLARE _version = "1.0.0";
+DECLARE $APP = "greenbucket";
+```
+
+Der Parser akzeptiert historisch auch `DECALRE` als Tippfehler-Alias.
+
+## Parameter aus PHP
+
+```php
+$result = GBDB::query('DECLARE _uid = param("uid"); OUTPUT _uid;', [], [
+    "uid" => "u123"
+]);
+```
+
+In GreenQL:
+
+```gql
+DECLARE _uid = param("uid");
+PICK * FROM users WHERE uid = _uid LIMIT 1;
+```
+
+## Werte und Literale
+
+Unterstützt werden Strings, Zahlen, `TRUE`, `FALSE`, `NULL`, Arrays und JSON-Objekte.
+
+```gql
+DECLARE _active = TRUE;
+DECLARE _price = 49.90;
+DECLARE _data = {"title":"Demo","active":true};
+DECLARE _list = ["a","b","c"];
+```
+
+## Datenbankstruktur
+
+### Base auswählen
+
+```gql
+ROOT main;
+```
+
+### Tabelle auswählen
+
+```gql
+BRANCH users;
+```
+
+### Bases und Tabellen anzeigen
+
+```gql
+SHOW BASES;
+SHOW TABLES;
+SHOW TABLES IN main;
+```
+
+### Base und Tabelle erstellen
+
+```gql
+GROW BASE main;
+GROW TABLE users WITH uid, username, email, active;
+```
+
+Alternative Schreibweise:
+
+```gql
+GROW TABLE users(uid, username, email, active);
+```
+
+### Spalte hinzufügen
+
+```gql
+ALTER TABLE users ADD COLUMN last_login DEFAULT "";
+EDIT TABLE users ADD active DEFAULT 1;
+```
+
+### Tabelle oder Base löschen
+
+```gql
+DROP TABLE users;
+DROP BASE old_demo;
+```
+
+## Daten lesen
+
+```gql
+PICK * FROM users;
+PICK uid, username FROM users WHERE active = 1;
+PICK * FROM users WHERE username ~= "mark" SORT username ASC LIMIT 10;
+```
+
+Operatoren:
+
+| Operator | Bedeutung |
+|---|---|
+| `=` / `==` | ist gleich |
+| `!=` | ist ungleich |
+| `>` / `<` | größer / kleiner |
+| `>=` / `<=` | größer/gleich bzw. kleiner/gleich |
+| `~=` | enthält / unscharfer Stringvergleich |
+
+## Daten einfügen
+
+```gql
+SEED users WITH {"uid":"u1","username":"admin","email":"admin@example.com"};
+```
+
+Mit Variable:
+
+```gql
+DECLARE _user = {"uid":"u2","username":"demo","email":"demo@example.com"};
+SEED users WITH _user;
+```
+
+## Daten ändern
+
+```gql
+RESHAPE users WITH {"active":0} WHERE uid = "u2";
+```
+
+## Daten löschen
+
+```gql
+ERASE FROM users WHERE uid = "u2";
+DELETE FROM users WHERE active = 0;
+```
+
+## Existenzprüfungen
+
+```gql
+EXISTS BASE main;
+EXISTS TABLE users IN main;
+EXISTS DATA users WHERE uid = "u1";
+```
+
+## Ausgabe
+
+`OUTPUT` schreibt einen Eintrag in das Ergebnisarray. Wichtig: Outputs werden nacheinander gesammelt und teilen sich nicht ein einziges Feld.
+
+```gql
+OUTPUT "Start";
+OUTPUT _user;
+OUTPUT {"status":"done"};
+```
+
+## Logging
+
+GreenQL unterstützt eigene Logbefehle.
+
+```gql
+SET_LOGFILE("assets/php/srv_logs/import.log");
+LOG("Import gestartet");
+LOG({"step":"users","count":10});
+CLEAR_LOG();
+DELETE_LOG_FILE();
+```
+
+| Befehl | Zweck |
+|---|---|
+| `SET_LOGFILE("path")` | setzt die Logdatei für folgende `LOG()`-Aufrufe. |
+| `LOG(value)` | schreibt Wert/Text/Objekt als Logeintrag. |
+| `CLEAR_LOG()` | leert die aktuelle Logdatei. |
+| `DELETE_LOG_FILE()` | löscht die aktuelle Logdatei. |
+
+## Kontrollfluss
+
+```gql
+DECLARE _active = TRUE;
+
+IF (_active == TRUE) {
+    OUTPUT "aktiv";
+} ELSE {
+    OUTPUT "inaktiv";
+}
+```
+
+## Schleifen
+
+```gql
+DECLARE _items = ["a", "b", "c"];
+
+FOR (_i; _item FROM _items) {
+    OUTPUT _item;
+}
+```
+
+Klassische Schleife:
+
+```gql
+FOR (_i = 0, _i < 5; _i++) {
+    OUTPUT _i;
+}
+```
+
+## Objekt-Mapping
+
+```gql
+DECLARE _obj = {"a":1,"b":2};
+
+MAP_OBJECT (_obj AS _key, _value) {
+    OUTPUT {"key": _key, "value": _value};
+}
+```
+
+## Funktionen
+
+```gql
+F makeTitle(_name) {
+    BACK "Hallo " + _name;
+}
+
+DECLARE _title = CALL makeTitle("Markus");
+OUTPUT _title;
+```
+
+`BACK` gibt einen Wert aus der Funktion zurück.
+
+## Klassen-/Objektlogik
+
+GreenQL unterstützt einfache Klassen-/Namespace-artige Blöcke.
+
+```gql
+CLASS UserTools {
+    PUB F label(_name) {
+        BACK "User: " + _name;
+    }
+}
+
+OUTPUT CLASS UserTools/label("Admin");
+```
+
+## Datei-Ausführung
+
+```gql
+FILE.INCLUDE "scripts/greenql/shared.gql";
+FILE.RUN "scripts/greenql/makeUser.gql" {"username":"admin"};
+```
+
+`FILE.BACK` gibt einen Wert aus einer per `FILE.RUN` ausgeführten Datei zurück.
+
+## Hash- und Helper-Funktionen
+
+```gql
+DECLARE _hash = hash_sha256("secret");
+DECLARE _len = len("greenql");
+```
+
+Unterstützt werden u. a. `hash_sha256`, `hash_sha512`, `hash_md5`, `hash_adler32`, `hash_crc32`, `hash(algo, value)` und `len(value)`.
+
+## Transaktionen
+
+```gql
+BEGIN;
+SEED users WITH {"uid":"u3","username":"temp"};
+SHOW TRANSACTION;
+COMMIT;
+```
+
+Oder bei Fehler:
+
+```gql
+ROLLBACK;
+```
+
+## Fehler und Stop
+
+```gql
+ERROR MSG "Import fehlgeschlagen";
+END_PROC;
+```
+
+`END_PROC` beendet die Script-Ausführung erfolgreich an dieser Stelle.
+
+## Ausführung in PHP
+
+```php
+$result = GBDB::query($script);
+```
+
+```php
+$result = GBDB::runScript("scripts/greenql/setup.gql", [
+    "username" => "admin"
+]);
+```
 
 ## Best Practices
-- Öffentliche Methoden bevorzugen und interne Dateipfade nicht hart im Anwendungscode duplizieren.
-- Rückgaben immer validieren, bevor sie in HTML, API-Antworten oder weitere DB-Operationen fließen.
-- Für neue Features erst Schema/Tabellen sauber anlegen und danach Daten schreiben.
-- Für produktive Systeme Backups, Schreibrechte und Authentifizierung vor dem Rollout testen.
 
-## Integration in eigene Projekte
+- Variablen konsequent mit `_` schreiben.
+- Konstanten mit `$` nur für Werte nutzen, die nicht geändert werden sollen.
+- Für Setup-Scripte `GROW BASE` und `GROW TABLE` am Anfang setzen.
+- Für Imports `SET_LOGFILE()` und `LOG()` nutzen.
+- Bei kritischen Änderungen `BEGIN`/`COMMIT` oder Snapshots nutzen.
+- Dateipfade nicht aus ungeprüftem Userinput bauen.
 
-Beim Einbau in neue Projekte sollte diese Komponente nicht isoliert betrachtet werden. Fast alle Framework-Klassen hängen indirekt an der zentralen Konfiguration `Vars` und an der gemeinsamen Einbindung über `_config.inc.php`. Dadurch bleibt der Anwendungscode kurz, aber Konfigurationsfehler fallen oft erst zur Laufzeit auf. Für saubere Projekte empfiehlt es sich deshalb, zuerst eine kleine Setup- oder Healthcheck-Seite anzulegen, die prüft, ob die Klasse geladen ist, ob die benötigten Pfade existieren und ob Schreib-/Leserechte stimmen.
+# Vollständigeres Befehls- und Sprachmodell
 
-Ein typischer Integrationsablauf sieht so aus:
+## Befehlsgruppen
 
-1. `_config.inc.php` laden.
-2. Benötigte Konstanten und `Vars`-Werte prüfen.
-3. Falls nötig Initialisierung ausführen.
-4. Einen einfachen Leseaufruf testen.
-5. Einen einfachen Schreibaufruf testen.
-6. Fehlerfälle testen, nicht nur den Erfolgsfall.
+| Gruppe | Befehle |
+|---|---|
+| Variablen | `DECLARE`, `DECALRE`, Zuweisung mit `=` |
+| Ausgabe | `OUTPUT`, `MSG`, `ERROR MSG` |
+| Datenbankstruktur | `ROOT`, `BRANCH`, `SHOW BASES`, `SHOW TABLES`, `GROW BASE`, `DROP BASE`, `GROW TABLE`, `ALTER TABLE`, `DROP TABLE`, `DESCRIBE` |
+| Daten | `PICK`, `SEED`, `RESHAPE`, `ERASE`, `DELETE FROM`, `PEEK` |
+| Kontrollfluss | `IF`, `ELSE`, `FOR`, `MAP_OBJECT` |
+| Funktionen | `F`, `CALL`, `BACK`, `END_PROC`, `this_f.restart()` |
+| Dateien | `FILE.INCLUDE`, `FILE.RUN`, `FILE.BACK` |
+| Logging | `SET_LOGFILE`, `LOG`, `CLEAR_LOG`, `DELETE_LOG_FILE` |
+| Transaktionen | `BEGIN`, `COMMIT`, `ROLLBACK`, `SHOW TRANSACTION` |
+| Utilities | `param()`, `len()`, `hash_*()`, `EXISTS` |
 
-## Test-Checkliste
+## Variablenkonvention
 
-- Läuft der Code lokal und auf dem Server mit derselben PHP-Version?
-- Sind alle benötigten Core-Dateien wirklich geladen?
-- Sind Rückgaben dokumentiert und werden sie im Anwendungscode geprüft?
-- Gibt es einen Test mit leerer Eingabe, ungültiger Eingabe und gültiger Eingabe?
-- Sind Dateipfade relativ zum Projekt-Root und nicht zum aktuellen Browserpfad gedacht?
-- Sind produktive Secrets aus Logs, Fehlermeldungen und Screenshots entfernt?
-- Funktioniert der Ablauf nach einem frischen Upload ohne manuelles Nachbessern der Rechte?
+Im aktuellen Sprachstil sollen normale Variablen mit `_` beginnen. Das macht Variablen optisch sofort erkennbar und trennt sie von Befehlen, Spaltennamen und Literalen.
 
-## Wartung und Erweiterung
+```gql
+DECLARE _username = "admin";
+OUTPUT _username;
+```
 
-Wenn diese Klasse erweitert wird, sollte jede neue öffentliche Methode sofort in dieser Dokumentation auftauchen. Bei Klassen, die mit GBDB arbeiten, muss außerdem geprüft werden, ob neue Tabellen oder Spalten in `schema.json` bzw. `schema_v2.json` berücksichtigt werden müssen. Bei Klassen, die Remote-Requests ausführen, sollten Fehlermeldungen immer so formuliert werden, dass Entwickler das Problem finden können, ohne dabei Auth-Tokens oder API-Keys offenzulegen.
+Konstanten beginnen mit `$`:
 
-## Praktische Hinweise für andere Entwickler
+```gql
+DECLARE $APP_NAME = "MuseumQR";
+```
 
-Dieses Framework folgt bewusst einem sehr direkten PHP-Stil. Viele Methoden sind statisch und dadurch einfach aufzurufen. Der Nachteil ist, dass falsche globale Konfigurationen schneller Auswirkungen auf mehrere Klassen haben. Andere Entwickler sollten deshalb nicht nur die einzelne Methode lesen, sondern auch die umgebenden Dateien `ENV.php`, `_config.inc.php` und bei Remote-Funktionen `backend.php` prüfen.
+## Datenbank-Workflow als Script
+
+```gql
+# 1. Base erzeugen und auswählen
+GROW BASE main;
+ROOT main;
+
+# 2. Tabelle erzeugen
+GROW TABLE users WITH uid, username, email, active;
+
+# 3. Beispieldaten einfügen
+DECLARE _user = {
+    "uid":"u1",
+    "username":"admin",
+    "email":"admin@example.com",
+    "active":true
+};
+
+SEED users WITH _user;
+
+# 4. Prüfen und ausgeben
+DECLARE _exists = EXISTS DATA users WHERE uid = "u1";
+OUTPUT _exists;
+PICK * FROM users LIMIT 10;
+```
+
+## Kontrollfluss-Beispiel mit Datenbank
+
+```gql
+DECLARE _uid = param("uid");
+DECLARE _exists = EXISTS DATA users WHERE uid = _uid;
+
+IF (_exists == TRUE) {
+    RESHAPE users WITH {"active":true} WHERE uid = _uid;
+    OUTPUT "user updated";
+} ELSE {
+    SEED users WITH {"uid":_uid,"username":"new_user","active":true};
+    OUTPUT "user created";
+}
+```
+
+## Logging bei Imports
+
+```gql
+SET_LOGFILE("assets/php/srv_logs/user_import.log");
+LOG("Import startet");
+
+DECLARE _users = param("users");
+
+FOR (_i; _user FROM _users) {
+    LOG({"import_user": _user});
+    SEED users WITH _user;
+}
+
+LOG("Import fertig");
+OUTPUT "done";
+```
+
+## Datei-Scripte modularisieren
+
+Große GreenQL-Prozesse sollten aufgeteilt werden:
+
+```gql
+FILE.INCLUDE "scripts/greenql/shared/helpers.gql";
+FILE.RUN "scripts/greenql/users/create_admin.gql" {"username":"admin"};
+```
+
+So kann man wiederkehrende Setup-Schritte in eigene Dateien legen.
+
+## Ergebnisstruktur verstehen
+
+GreenQL gibt intern eine Ergebnisliste zurück. Jeder Befehl kann eine Message, Daten oder Statusinformationen erzeugen. Deshalb sollte PHP-Code nicht nur auf ein einzelnes Feld vertrauen.
+
+```php
+$result = GBDB::query($script);
+
+foreach ($result as $entry) {
+    // je nach Engine: msg/data/status prüfen
+}
+```
+
+## Sprachintention
+
+GreenQL soll nicht SQL kopieren. Die Sprache verwendet bewusst eigene Begriffe:
+
+- `GROW` statt `CREATE`, weil Strukturen „wachsen“.
+- `SEED` statt `INSERT`, weil Daten „gesät“ werden.
+- `RESHAPE` statt `UPDATE`, weil Datensätze umgeformt werden.
+- `ERASE` statt `DELETE`, als eigener Sprachstil.
+- `ROOT` und `BRANCH`, weil Bases und Tabellen wie eine Baumstruktur gedacht werden können.
+
+Diese Eigenheiten sind Teil der Identität der Sprache und sollten auch in Highlighting, UI und Doku erhalten bleiben.
+
+## Runtime-Funktionen für Advanced-Engine-Features
+
+GreenQL kann die neuen Engine-Funktionen nicht nur als Befehl, sondern auch als Runtime-Ausdruck verwenden. Das ist praktisch, wenn Ergebnisse in Variablen gespeichert, geprüft oder weiterverarbeitet werden sollen.
+
+```gql
+DECLARE _hasInstance = instance_exists("default");
+DECLARE _hasBase = base_exists("main");
+DECLARE _hasUsers = table_exists("main", "users");
+DECLARE _hasMax = data_exists("main", "users", ["email": "max@example.de"]);
+
+DECLARE _monitor = monitor("main", "users");
+DECLARE _recovery = recover("main", "users");
+DECLARE _page = page("main", "users", 1, 50);
+DECLARE _cursor = cursor("main", "users", 100);
+DECLARE _hits = fulltext_search("main", "users", "Max Muster", ["username", "email"], 25);
+
+OUTPUT(_monitor);
+OUTPUT(_hits);
+```
+
+Die Funktionen unterstützen bei GBDBv2 zusätzlich Instanzargumente, wenn diese vorne übergeben werden:
+
+```gql
+DECLARE _hasBase = base_exists("kunde1", "main");
+DECLARE _hasUsers = table_exists("kunde1", "main", "users");
+DECLARE _page = page("kunde1", "main", "users", 1, 50);
+DECLARE _hits = fulltext_search("kunde1", "main", "users", "Max", ["username"], 10);
+```
+
+## GreenQL ENV-Werte
+
+Sensible Script-Werte können über `ENV("key")` gelesen werden. Die Werte liegen nicht in einer normalen Text-`.env`, sondern in einer PHP-Datei:
+
+```php
+// scripts/greenql/.ENV/.env.php
+<?php
+
+$GREENQL_ENV = [
+    "api_auth" => "dein-geheimer-api-token",
+];
+
+return $GREENQL_ENV;
+```
+
+Verwendung im GreenQL-Script:
+
+```gql
+DECLARE _api_auth = ENV("api_auth");
+```
+
+Der ENV-Key darf Buchstaben, Zahlen, `_`, `-` und `.` enthalten. Fehlt der Key, gibt `ENV()` `null` zurück. Die Datei wird serverseitig per PHP geladen und ist damit nicht als Klartext-Datei für den Browser gedacht. Unterstützt werden `return [...]`, `$GREENQL_ENV`, `$GQL_ENV`, `$ENV` oder einfache PHP-Variablen wie `$api_auth`. Zusätzlich liegt in `scripts/greenql/.ENV/` eine `.htaccess`, die direkten Zugriff bei Apache blockiert.

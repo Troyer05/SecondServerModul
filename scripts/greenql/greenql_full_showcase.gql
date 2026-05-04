@@ -1,0 +1,782 @@
+# ============================================================
+# greenQLv2 Full Showcase
+# ============================================================
+# Ziel:
+# - Möglichst viele Befehle, Runtime-Funktionen und Sprachfeatures testen
+# - Eigene Demo-Instanz verwenden
+# - Keine Systemdaten anfassen
+# - Mehrere OUTPUT-Einträge nacheinander erzeugen
+# - Logging, CRUD, Checks, Indexe, Constraints, Klassen, Funktionen,
+#   Runtime-Helfer, Advanced Engine Commands und Transaktionen zeigen
+# ============================================================
+
+META = {
+    "GreenQL_version": 2,
+    "author": "Markus Müller / greenbucket",
+    "description": "Ausführbares Showcase-Script für CRUD, Runtime, Funktionen, Klassen, Logging, Output, Transaktionen und Engine-Kommandos.",
+    "return": "object",
+    "params": [
+        {
+            "parameter": "demo_name",
+            "description": "Optionaler Name für den ersten Demo-User"
+        },
+        {
+            "parameter": "demo_password",
+            "description": "Optionales Demo-Passwort"
+        },
+        {
+            "parameter": "delete_log",
+            "description": "Optional true, um die Logdatei am Ende zu löschen"
+        },
+        {
+            "parameter": "cleanup",
+            "description": "Optional true, um Demo-Tabelle/Base/Instanz am Ende zu entfernen"
+        }
+    ]
+};
+
+DECLARE $demo_instance = "gql_showcase";
+DECLARE $demo_base = "gql_showcase_main";
+DECLARE $demo_table = "users";
+DECLARE $demo_archive_table = "users_archive";
+DECLARE $log_file = "logs/greenql_full_showcase.log";
+DECLARE $api_auth = ENV("api_auth");
+
+DECLARE _input_name = param("demo_name");
+DECLARE _input_password = param("demo_password");
+DECLARE _delete_log = param("delete_log");
+DECLARE _cleanup = param("cleanup");
+
+IF (!_input_name) {
+    _input_name = "Ada";
+} ELSE {
+    OUTPUT "Parameter demo_name wurde gesetzt.";
+}
+
+IF (!_input_password) {
+    _input_password = "demo-secret";
+} ELSE {
+    OUTPUT "Parameter demo_password wurde gesetzt.";
+}
+
+IF (!_delete_log) {
+    _delete_log = false;
+}
+
+IF (!_cleanup) {
+    _cleanup = false;
+}
+
+DECLARE _now = NOW;
+DECLARE _seed_uid = "u001";
+DECLARE _second_uid = "u002";
+DECLARE _third_uid = "u003";
+
+OUTPUT "Showcase gestartet.";
+OUTPUT _now;
+
+SET_LOGFILE($log_file);
+CLEAR_LOG();
+LOG("Showcase gestartet");
+LOG(["instance": $demo_instance, "base": $demo_base, "table": $demo_table, "time": _now]);
+
+# ============================================================
+# Hashing / Runtime-Basis
+# ============================================================
+
+DECLARE _hash_default = hash(_input_password);
+DECLARE _hash_sha256 = hash_sha256(_input_password);
+DECLARE _hash_sha512 = hash_sha512(_input_password);
+DECLARE _hash_md5 = hash_md5(_input_password);
+DECLARE _hash_adler32 = hash_adler32(_input_password);
+DECLARE _hash_crc32 = hash_crc32(_input_password);
+
+DECLARE _random_a = uni_random();
+DECLARE _random_b = spark_id();
+DECLARE _random_c = fresh_id();
+
+OUTPUT "Hashing und IDs erzeugt.";
+OUTPUT ["sha256": _hash_sha256, "sha512": _hash_sha512, "md5": _hash_md5, "adler32": _hash_adler32, "crc32": _hash_crc32];
+OUTPUT ["uni_random": _random_a, "spark_id": _random_b, "fresh_id": _random_c];
+
+LOG(["hash_default": _hash_default, "random": _random_a]);
+
+# ============================================================
+# Optionaler API-Test
+# ============================================================
+# Achtung:
+# Diese URL ist absichtlich deaktiviert, damit das Showcase offline stabil bleibt.
+# Zum echten Testen aktivieren und URL korrigieren.
+#
+# DECLARE _api_result = fetch_api("https://example.com/api", ["do": "ping"], ["auth-key": "abc123"]);
+# OUTPUT _api_result;
+# DECLARE _api_result_2 = api_fetch("https://example.com/api", ["do": "ping"], []);
+# DECLARE _api_result_3 = call_api("https://example.com/api", ["do": "ping"], []);
+
+# ============================================================
+# Datei-Features optional
+# ============================================================
+# Nur aktivieren, wenn die Dateien im Script-Ordner existieren.
+#
+# FILE.INCLUDE "userClass.gql";
+# DECLARE _file_run_result = FILE.RUN "useless.gql" ["name": _input_name];
+# OUTPUT _file_run_result;
+
+# ============================================================
+# Instanz / Base / Tabelle vorbereiten
+# ============================================================
+
+DECLARE _has_instance = EXISTS INSTANCE $demo_instance;
+
+IF (!_has_instance) {
+    GROW INSTANCE gql_showcase;
+    OUTPUT "Instanz wurde erstellt.";
+} ELSE {
+    OUTPUT "Instanz existiert bereits.";
+}
+
+USE INSTANCE gql_showcase;
+ROOT INSTANCE gql_showcase;
+
+DECLARE _has_base = EXISTS BASE $demo_base;
+
+IF (!_has_base) {
+    GROW BASE gql_showcase_main;
+    OUTPUT "Base wurde erstellt.";
+} ELSE {
+    OUTPUT "Base existiert bereits.";
+}
+
+ROOT gql_showcase_main;
+
+DECLARE _has_table = EXISTS TABLE $demo_table;
+
+IF (!_has_table) {
+    GROW TABLE users (uid, username, email, password, active, created_at, last_login, role, note, score);
+    OUTPUT "Tabelle users wurde erstellt.";
+} ELSE {
+    OUTPUT "Tabelle users existiert bereits.";
+}
+
+DECLARE _has_archive_table = EXISTS TABLE $demo_archive_table;
+
+IF (!_has_archive_table) {
+    GROW TABLE users_archive (uid, username, email, password, active, created_at, last_login, role, note, score);
+    OUTPUT "Archiv-Tabelle wurde erstellt.";
+}
+
+BRANCH users;
+
+ALTER TABLE users ADD COLUMN login_count DEFAULT 0;
+ALTER TABLE users ADD COLUMN tags DEFAULT "";
+ALTER TABLE users ADD CONSTRAINT UNIQUE uid;
+ALTER TABLE users ADD CONSTRAINT REQUIRED username;
+
+INDEX users uid;
+INDEX users username;
+REINDEX users;
+
+OUTPUT "Struktur vorbereitet.";
+LOG("Struktur vorbereitet");
+
+# ============================================================
+# Transaktion mit Rollback-Test
+# ============================================================
+
+BEGIN;
+SEED users WITH uid="rollback_test", username="Rollback User", email="rollback@example.test", password="x", active=false, created_at=NOW, last_login="", role="test", note="should disappear", score=0, login_count=0, tags="rollback";
+ROLLBACK;
+
+DECLARE _rollback_exists = EXISTS DATA ["uid": "rollback_test"] IN users;
+OUTPUT ["rollback_test_exists": _rollback_exists];
+
+# ============================================================
+# Transaktion mit echten Demo-Daten
+# ============================================================
+
+BEGIN;
+
+SEED users WITH uid=_seed_uid, username=_input_name, email="ada@example.test", password=_hash_sha256, active=true, created_at=_now, last_login="", role="admin", note="created by showcase", score=100, login_count=1, tags="demo,admin";
+SEED users WITH uid=_second_uid, username="Grace", email="grace@example.test", password=hash("sha256", "grace-secret"), active=true, created_at=NOW, last_login="", role="dev", note="second row", score=80, login_count=2, tags="demo,dev";
+SEED users WITH uid=_third_uid, username="Linus", email="linus@example.test", password=hash_sha512("linus-secret"), active=false, created_at=NOW, last_login="", role="viewer", note="inactive row", score=30, login_count=0, tags="demo,inactive";
+
+COMMIT;
+
+SHOW TRANSACTION;
+
+DECLARE _user_exists = EXISTS DATA ["uid": _seed_uid] IN users;
+
+IF (!_user_exists) {
+    ERROR MSG "Showcase-Datensatz wurde nicht angelegt.";
+} ELSE {
+    OUTPUT "Showcase-Datensatz wurde angelegt.";
+}
+
+# ============================================================
+# CRUD / Query
+# ============================================================
+
+RESHAPE users WITH username="Ada Lovelace", last_login=NOW, note="updated by RESHAPE", login_count=2 WHERE uid=_seed_uid;
+
+PICK * FROM users WHERE active = true SORT username ASC LIMIT 10;
+PICK uid, username, role, score FROM users WHERE score >= 50 SORT score DESC LIMIT 10;
+
+EXPLAIN PICK * FROM users WHERE active = true SORT username ASC LIMIT 5;
+
+PEEK users LIMIT 5;
+DESCRIBE users;
+SHOW META FROM users;
+SHOW CONSTRAINTS FROM users;
+SHOW INDEXES FROM users;
+
+CHECK users;
+HEALTH users;
+SNAPSHOT users;
+PACK users;
+REPAIR users;
+
+# ============================================================
+# Advanced Engine Commands
+# ============================================================
+
+MONITOR;
+MONITOR users;
+MONITOR gql_showcase_main.users;
+
+PAGE users PAGE 1 SIZE 2;
+PAGE gql_showcase_main.users PAGE 1 SIZE 2;
+
+CURSOR users SIZE 2;
+CURSOR gql_showcase_main.users SIZE 2;
+
+FULLTEXT users SEARCH "Ada" COLUMNS username,note LIMIT 10;
+FULLTEXT gql_showcase_main.users SEARCH "demo" COLUMNS username,note,tags LIMIT 10;
+
+FULLTEXT "Grace" FROM users LIMIT 10;
+FULLTEXT "Ada" FROM users IN gql_showcase_main COLUMNS username,note LIMIT 10;
+
+RECOVER users;
+RECOVER gql_showcase_main.users;
+
+# ============================================================
+# Runtime-Datenfunktionen
+# ============================================================
+
+DECLARE _all_users = fetch_data($demo_base, $demo_table, []);
+DECLARE _all_users_alias = fetch($demo_base, $demo_table, []);
+DECLARE _user_count = count_data($demo_base, $demo_table, []);
+DECLARE _user_count_alias = tally_data($demo_base, $demo_table, []);
+DECLARE _last_user = last_added($demo_base, $demo_table);
+DECLARE _last_user_alias = last_data($demo_base, $demo_table);
+
+OUTPUT "Runtime-Datenfunktionen:";
+OUTPUT _all_users;
+OUTPUT ["count_data": _user_count, "tally_data": _user_count_alias];
+OUTPUT ["last_added": _last_user, "last_data": _last_user_alias];
+
+DECLARE _runtime_insert = add_data($demo_base, $demo_table, ["uid": "u004", "username": "Margaret", "email": "margaret@example.test", "password": hash_sha256("margaret-secret"), "active": true, "created_at": NOW, "last_login": "", "role": "scientist", "note": "inserted by add_data", "score": 90, "login_count": 1, "tags": "demo,science"]);
+DECLARE _runtime_insert_alias = seed_data($demo_base, $demo_table, ["uid": "u005", "username": "Katherine", "email": "katherine@example.test", "password": hash_sha256("katherine-secret"), "active": true, "created_at": NOW, "last_login": "", "role": "scientist", "note": "inserted by seed_data", "score": 95, "login_count": 1, "tags": "demo,science"]);
+DECLARE _runtime_insert_alias_2 = plant_data($demo_base, $demo_table, ["uid": "u006", "username": "Hedy", "email": "hedy@example.test", "password": hash_sha256("hedy-secret"), "active": true, "created_at": NOW, "last_login": "", "role": "inventor", "note": "inserted by plant_data", "score": 85, "login_count": 1, "tags": "demo,inventor"]);
+
+OUTPUT ["add_data": _runtime_insert, "seed_data": _runtime_insert_alias, "plant_data": _runtime_insert_alias_2];
+
+DECLARE _runtime_edit = edit_data($demo_base, $demo_table, ["note": "edited by edit_data", "score": 96], ["uid": "u005"]);
+DECLARE _runtime_edit_alias = reshape_data($demo_base, $demo_table, ["note": "edited by reshape_data", "score": 86], ["uid": "u006"]);
+
+OUTPUT ["edit_data": _runtime_edit, "reshape_data": _runtime_edit_alias];
+
+DECLARE _runtime_delete = delete_data($demo_base, $demo_table, ["uid": "u004"]);
+DECLARE _runtime_delete_alias = erase_data($demo_base, $demo_table, ["uid": "u006"]);
+
+OUTPUT ["delete_data": _runtime_delete, "erase_data": _runtime_delete_alias];
+
+# ============================================================
+# Runtime-Existenzfunktionen
+# ============================================================
+
+DECLARE _instance_exists_fn = instance_exists($demo_instance);
+DECLARE _base_exists_fn = base_exists($demo_base);
+DECLARE _base_exists_fn_2 = base_exists($demo_instance, $demo_base);
+DECLARE _table_exists_fn = table_exists($demo_base, $demo_table);
+DECLARE _table_exists_fn_2 = table_exists($demo_instance, $demo_base, $demo_table);
+DECLARE _data_exists_fn = data_exists($demo_base, $demo_table, ["uid": _seed_uid]);
+
+OUTPUT "Runtime-Existenzfunktionen:";
+OUTPUT ["instance_exists": _instance_exists_fn, "base_exists": _base_exists_fn, "base_exists_instance": _base_exists_fn_2, "table_exists": _table_exists_fn, "table_exists_instance": _table_exists_fn_2, "data_exists": _data_exists_fn];
+
+# ============================================================
+# Runtime-Strukturfunktionen
+# ============================================================
+
+DECLARE _instances_a = get_instances();
+DECLARE _instances_b = instances();
+
+DECLARE _bases_a = get_bases();
+DECLARE _bases_b = bases();
+
+DECLARE _tables_a = get_tables($demo_base);
+DECLARE _tables_b = tables($demo_base);
+
+OUTPUT "Runtime-Strukturfunktionen:";
+OUTPUT _instances_a;
+OUTPUT _bases_a;
+OUTPUT _tables_a;
+
+DECLARE _new_col = new_column($demo_base, $demo_table, "runtime_column", "");
+DECLARE _new_col_alias = sprout_column($demo_base, $demo_table, "runtime_column_2", "");
+
+OUTPUT ["new_column": _new_col, "sprout_column": _new_col_alias];
+
+DECLARE _drop_col = delete_column($demo_base, $demo_table, "runtime_column_2");
+DECLARE _drop_col_alias = prune_column($demo_base, $demo_table, "runtime_column");
+
+OUTPUT ["delete_column": _drop_col, "prune_column": _drop_col_alias];
+
+# ============================================================
+# Runtime Advanced-Funktionen
+# ============================================================
+
+DECLARE _monitor_all = monitor();
+DECLARE _monitor_table = monitor($demo_base, $demo_table);
+DECLARE _page_result = page($demo_base, $demo_table, 1, 3);
+DECLARE _cursor_result = cursor($demo_base, $demo_table, 3);
+DECLARE _fulltext_result = fulltext_search($demo_base, $demo_table, "Ada", ["username", "note"], 10);
+DECLARE _recover_result = recover($demo_base, $demo_table);
+
+OUTPUT "Runtime Advanced-Funktionen:";
+OUTPUT _monitor_table;
+OUTPUT _page_result;
+OUTPUT _cursor_result;
+OUTPUT _fulltext_result;
+OUTPUT _recover_result;
+
+# ============================================================
+# Transfer / Copy / Move
+# ============================================================
+
+DECLARE _copy_result = copy_data($demo_base, $demo_table, $demo_base, $demo_archive_table);
+OUTPUT ["copy_data": _copy_result];
+
+DECLARE _archive_rows_after_copy = fetch_data($demo_base, $demo_archive_table, []);
+OUTPUT _archive_rows_after_copy;
+
+# move_data / transfer_data_delete wird hier nur demonstriert, aber nicht
+# auf users ausgeführt, damit die Demo-Daten erhalten bleiben.
+#
+# DECLARE _move_result = move_data($demo_base, $demo_table, $demo_base, $demo_archive_table);
+# OUTPUT _move_result;
+
+# ============================================================
+# Readonly / Lock
+# ============================================================
+
+DECLARE _lock_result = lock_data($demo_base, $demo_table, ["uid": _seed_uid], true);
+DECLARE _unlock_result = set_data_readonly($demo_base, $demo_table, ["uid": _seed_uid], false);
+
+OUTPUT ["lock_data": _lock_result, "set_data_readonly": _unlock_result];
+
+# ============================================================
+# Eigene Funktion
+# ============================================================
+
+F make_label(_prefix, _name) {
+    DECLARE _text = _prefix + ": " + _name;
+    BACK _text;
+}
+
+F safe_score_label(_name, _score) {
+    IF (_score >= 90) {
+        BACK _name + " ist Top-Level";
+    } ELSE {
+        BACK _name + " ist Normal-Level";
+    }
+}
+
+DECLARE _label = CALL make_label("Aktiver User", _input_name);
+DECLARE _score_label = CALL safe_score_label(_input_name, 100);
+
+OUTPUT _label;
+OUTPUT _score_label;
+
+LOG(_label);
+LOG(_score_label);
+
+# ============================================================
+# Schleifen
+# ============================================================
+
+FOR (_i = 0; _i < 3; _i++) {
+    OUTPUT "FOR loop index " + _i;
+    LOG(["loop": _i]);
+}
+
+DECLARE _profile = ["name": _input_name, "role": "admin", "active": true, "score": 100];
+
+MAP_OBJECT(_profile AS _key, _value) {
+    OUTPUT "MAP_OBJECT " + _key + " = " + _value;
+    LOG(["map_key": _key, "map_value": _value]);
+}
+
+# ============================================================
+# Klasse / Methode / this
+# ============================================================
+
+C ShowcaseHelper {
+    PUB DECLARE _prefix = "ShowcaseHelper";
+
+    PUB F describe(_name, _count) {
+        DECLARE _text = this._prefix + " => " + _name + " / rows=" + _count;
+        BACK _text;
+    }
+
+    PUB F badge(_role) {
+        IF (_role == "admin") {
+            BACK this._prefix + " badge: ADMIN";
+        } ELSE {
+            BACK this._prefix + " badge: USER";
+        }
+    }
+}
+
+DECLARE _class_result = CALL ShowcaseHelper/describe(_input_name, _user_count);
+DECLARE _class_badge = CALL ShowcaseHelper/badge("admin");
+
+OUTPUT _class_result;
+OUTPUT _class_badge;
+
+LOG(_class_result);
+LOG(_class_badge);
+
+# ============================================================
+# Weitere Queries nach Runtime-Änderungen
+# ============================================================
+
+DECLARE _final_count_before_cleanup = count_data($demo_base, $demo_table, []);
+DECLARE _final_rows_before_cleanup = fetch_data($demo_base, $demo_table, []);
+
+OUTPUT "Finale Demo-Daten vor optionalem Cleanup:";
+OUTPUT _final_count_before_cleanup;
+OUTPUT _final_rows_before_cleanup;
+
+PICK * FROM users SORT uid ASC LIMIT 50;
+PAGE users PAGE 1 SIZE 50;
+FULLTEXT users SEARCH "demo" LIMIT 25;
+
+# ============================================================
+# Rechte-/Engine-Schlüsselwörter
+# ============================================================
+# Diese Befehle sind je nach Engine-Implementierung evtl. reine Demo- oder
+# Admin-Features. Wenn sie bei dir aktiv sind, kannst du sie einkommentieren.
+#
+# GRANT admin read ON users;
+# REVOKE admin read ON users;
+
+# ============================================================
+# Delete / Index / Constraint Cleanup innerhalb der Demo-Tabelle
+# ============================================================
+
+DELETE FROM users WHERE uid="u002";
+ERASE FROM users WHERE uid="u003";
+
+UNINDEX users uid;
+UNINDEX users username;
+
+ALTER TABLE users DROP CONSTRAINT UNIQUE uid;
+ALTER TABLE users DROP CONSTRAINT REQUIRED username;
+
+REPAIR users;
+CHECK users;
+
+DECLARE _after_delete_rows = fetch_data($demo_base, $demo_table, []);
+OUTPUT "Nach DELETE / ERASE:";
+OUTPUT _after_delete_rows;
+
+LOG(["after_delete_rows": _after_delete_rows]);
+
+# ============================================================
+# Optional: Logdatei löschen
+# ============================================================
+
+IF (_delete_log) {
+    DELETE_LOG_FILE();
+    OUTPUT "Logdatei wurde gelöscht.";
+} ELSE {
+    OUTPUT "Logdatei bleibt erhalten.";
+}
+
+# ============================================================
+# Optional: Demo-System aufräumen
+# ============================================================
+# Cleanup löscht nur die Showcase-Strukturen.
+# Standard ist false, damit man nach dem Script die Ergebnisse ansehen kann.
+# ============================================================
+
+IF (_cleanup) {
+    DROP TABLE users_archive;
+    DROP TABLE users;
+    DROP BASE gql_showcase_main;
+    DROP INSTANCE gql_showcase FORCE;
+    OUTPUT "Cleanup wurde ausgeführt.";
+} ELSE {
+    OUTPUT "Cleanup wurde übersprungen.";
+}
+
+# ============================================================
+# Rückgabe
+# ============================================================
+
+DECLARE _return_rows = fetch_data($demo_base, $demo_table, []);
+DECLARE _return_count = count_data($demo_base, $demo_table, []);
+
+FILE.BACK [
+    "ok": true,
+    "instance": $demo_instance,
+    "base": $demo_base,
+    "table": $demo_table,
+    "rows": _return_rows,
+    "count": _return_count,
+    "cleanup": _cleanup,
+    "delete_log": _delete_log
+];
+
+# ============================================================
+# Optional Showcase Blocks
+# ============================================================
+# Diese Blöcke sind bewusst auskommentiert.
+# Du kannst sie einzeln einkommentieren, wenn die jeweilige Engine-Funktion
+# bei dir aktiv ist oder die benötigten Dateien/Endpunkte existieren.
+# ============================================================
+
+
+# ============================================================
+# Optional: Externe API Calls
+# ============================================================
+# Zweck:
+# - fetch_api / api_fetch / call_api testen
+# - POST-Daten und Header übergeben
+#
+# Wichtig:
+# - URL muss existieren
+# - Endpoint sollte JSON zurückgeben
+# - Beispiel-URL ist nur Platzhalter
+# ============================================================
+
+# DECLARE _api_payload = ["do": "ping", "source": "greenql_showcase"];
+# DECLARE _api_headers = ["auth-key": "abc123", "content-type": "application/json"];
+#
+# DECLARE _api_result_1 = fetch_api("https://example.com/api", _api_payload, _api_headers);
+# DECLARE _api_result_2 = api_fetch("https://example.com/api", _api_payload, _api_headers);
+# DECLARE _api_result_3 = call_api("https://example.com/api", _api_payload, _api_headers);
+#
+# OUTPUT "API Ergebnisse:";
+# OUTPUT _api_result_1;
+# OUTPUT _api_result_2;
+# OUTPUT _api_result_3;
+#
+# LOG(["api_result_1": _api_result_1]);
+# LOG(["api_result_2": _api_result_2]);
+# LOG(["api_result_3": _api_result_3]);
+
+
+# ============================================================
+# Optional: Datei einbinden
+# ============================================================
+# Zweck:
+# - Externe greenQL-Datei laden
+# - Dort definierte Funktionen/Klassen danach verwenden
+#
+# Voraussetzung:
+# - Datei userClass.gql muss existieren
+# - Datei sollte gültige greenQL-Syntax enthalten
+#
+# Beispielinhalt userClass.gql:
+#
+# C userClass {
+#     PUB F someFunction(_name) {
+#         BACK "UserClass sagt Hallo " + _name;
+#     }
+# }
+# ============================================================
+
+# FILE.INCLUDE "userClass.gql";
+#
+# DECLARE _included_class_result = CALL userClass/someFunction(_input_name);
+# OUTPUT _included_class_result;
+# LOG(_included_class_result);
+
+
+# ============================================================
+# Optional: Datei ausführen
+# ============================================================
+# Zweck:
+# - Eine andere greenQL-Datei ausführen
+# - Parameter an diese Datei übergeben
+# - Rückgabe via FILE.BACK empfangen
+#
+# Voraussetzung:
+# - Datei useless.gql muss existieren
+#
+# Beispielinhalt useless.gql:
+#
+# DECLARE _name = param("name");
+# IF (!_name) {
+#     _name = "Fallback";
+# }
+# FILE.BACK ["ok": true, "message": "Hallo " + _name];
+# ============================================================
+
+# DECLARE _file_run_result = FILE.RUN "useless.gql" ["name": _input_name, "source": "showcase"];
+# OUTPUT "FILE.RUN Ergebnis:";
+# OUTPUT _file_run_result;
+# LOG(["file_run_result": _file_run_result]);
+
+
+# ============================================================
+# Optional: Rechte / Rollen / Access-Control
+# ============================================================
+# Zweck:
+# - GRANT / REVOKE testen
+#
+# Hinweis:
+# - Nur aktivieren, wenn deine Engine diese Befehle wirklich ausführt.
+# - Wenn sie aktuell nur fürs Highlighting existieren, block kann Fehler werfen.
+# ============================================================
+
+# GRANT admin read ON users;
+# GRANT admin write ON users;
+# GRANT admin structure ON users;
+# GRANT dev read ON users;
+#
+# SHOW GRANTS FROM users;
+#
+# REVOKE dev read ON users;
+# REVOKE admin structure ON users;
+#
+# SHOW GRANTS FROM users;
+
+
+# ============================================================
+# Optional: Move / Transfer
+# ============================================================
+# Zweck:
+# - Daten von users nach users_archive verschieben
+#
+# Achtung:
+# - move_data / transfer_data_delete können Quelldaten löschen.
+# - Erst testen, wenn du sicher bist.
+# ============================================================
+
+# DECLARE _before_move_users = fetch_data($demo_base, $demo_table, []);
+# DECLARE _before_move_archive = fetch_data($demo_base, $demo_archive_table, []);
+#
+# OUTPUT "Vor move_data:";
+# OUTPUT _before_move_users;
+# OUTPUT _before_move_archive;
+#
+# DECLARE _move_result = move_data($demo_base, $demo_table, $demo_base, $demo_archive_table);
+# DECLARE _transfer_delete_result = transfer_data_delete($demo_base, $demo_archive_table, $demo_base, $demo_table);
+#
+# OUTPUT "Move / Transfer Delete Ergebnisse:";
+# OUTPUT _move_result;
+# OUTPUT _transfer_delete_result;
+#
+# DECLARE _after_move_users = fetch_data($demo_base, $demo_table, []);
+# DECLARE _after_move_archive = fetch_data($demo_base, $demo_archive_table, []);
+#
+# OUTPUT "Nach move_data:";
+# OUTPUT _after_move_users;
+# OUTPUT _after_move_archive;
+
+
+# ============================================================
+# Optional: Komplettes Löschen der Demo-Struktur
+# ============================================================
+# Zweck:
+# - Showcase sauber entfernen
+#
+# Achtung:
+# - Löscht die Demo-Tabelle, Demo-Base und Demo-Instanz.
+# - Nur verwenden, wenn du die erzeugten Daten nicht mehr anschauen willst.
+# ============================================================
+
+# DROP TABLE users_archive;
+# DROP TABLE users;
+# DROP BASE gql_showcase_main;
+# DROP INSTANCE gql_showcase FORCE;
+#
+# OUTPUT "Showcase-Struktur wurde gelöscht.";
+
+
+# ============================================================
+# Optional: Harte Fehler testen
+# ============================================================
+# Zweck:
+# - ERROR MSG testen
+# - Script soll absichtlich abbrechen
+#
+# Achtung:
+# - Alles danach wird nicht mehr ausgeführt.
+# ============================================================
+
+# ERROR MSG "Absichtlicher Testfehler aus dem Showcase.";
+
+
+# ============================================================
+# Optional: Frühes erfolgreiches Beenden
+# ============================================================
+# Zweck:
+# - END_PROC testen
+# - Script endet erfolgreich an dieser Stelle
+#
+# Achtung:
+# - Alles danach wird nicht mehr ausgeführt.
+# ============================================================
+
+# OUTPUT "Script endet jetzt absichtlich mit END_PROC.";
+# END_PROC;
+
+
+# ============================================================
+# Optional: this_f.restart()
+# ============================================================
+# Zweck:
+# - Neustart der aktuellen Funktion testen
+#
+# Achtung:
+# - Nur aktivieren, wenn deine Engine dafür ein Sicherheitslimit hat.
+# - Ohne Limit kann das rekursiv/endlosschleifenartig werden.
+# ============================================================
+
+# F restart_demo(_count) {
+#     OUTPUT "restart_demo count=" + _count;
+#
+#     IF (_count < 1) {
+#         _count = _count + 1;
+#         this_f.restart();
+#     }
+#
+#     BACK "restart_demo fertig";
+# }
+#
+# DECLARE _restart_result = CALL restart_demo(0);
+# OUTPUT _restart_result;
+
+
+# ============================================================
+# Optional: FILE.BACK als früher Return
+# ============================================================
+# Zweck:
+# - Datei-/Script-Rückgabe testen
+#
+# Achtung:
+# - Wenn du das hier einkommentierst, sollte es sehr weit unten stehen.
+# - Je nach Engine endet das Script dadurch direkt.
+# ============================================================
+
+# FILE.BACK [
+#     "ok": true,
+#     "message": "Früher FILE.BACK Test",
+#     "instance": $demo_instance,
+#     "base": $demo_base,
+#     "table": $demo_table
+# ];

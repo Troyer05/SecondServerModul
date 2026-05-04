@@ -18,7 +18,7 @@ Diese Datei listet die wichtigsten Framework-Klassen, ihre Dateien und ihren Zwe
 | `GBDBv2` | `assets/php/inc/gbdb_framework/core/gbdb_sys_v2.php` | erweitert GBDB um Instanzen |
 | `GetForm` | `assets/php/inc/gbdb_framework/core/getForm.php` | verarbeitet Request- und Formularwerte in einer zentralen Klasse |
 | `GreenQL` | `assets/php/inc/gbdb_framework/core/greenql_engine.php` | ist die kleine Query-Sprache für GBDB |
-| `GreenQLUIv2Helper` | `assets/php/inc/gbdb_framework/dev/gql_v2/greenql_ui_v2_helper.php` | Framework-Klasse für projektbezogene Hilfslogik. |
+| `GreenQLUIv2Helper` | `assets/php/inc/gbdb_framework/ui/greenql_v2_helper.php` | Framework-Klasse für projektbezogene Hilfslogik. |
 | `GreenQLv2` | `assets/php/inc/gbdb_framework/core/greenql_engine_v2.php` | ist die instanzfähige GreenQL-Engine |
 | `Http` | `assets/php/inc/gbdb_framework/core/http.php` | bündelt einfache HTTP-GET/POST-Requests, JSON-Antworten, Redirects, Header-Auswertung und Mailversand |
 | `Json` | `assets/php/inc/gbdb_framework/core/json.php` | stellt JSON-Helfer bereit, insbesondere für einheitliches Encodieren/Decodieren und Dateizugriff |

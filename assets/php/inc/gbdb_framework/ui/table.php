@@ -1,5 +1,4 @@
 <?php
-// Parameter prüfen
 if (empty($_GET['t']) || empty($_GET['db'])) {
     Ref::to('?null');
     exit();
@@ -7,24 +6,19 @@ if (empty($_GET['t']) || empty($_GET['db'])) {
 
 $table = urldecode($_GET['t']);
 $db    = urldecode($_GET['db']);
-
-// Daten
 $data = GBDB::getData($db, $table);
 $keys = GBDB::getKeys($db, $table);
 
-// Datensatz löschen
 if (isset($_GET["delete"])) {
     GBDB::deleteData($db, $table, "id", $_GET["id"]);
     Ref::to("?show=table&db=" . urlencode($db) . "&t=" . urlencode($table));
 }
 
-// Tabelle löschen
 if (isset($_GET["del"])) {
     unlink("assets/DB/GBDB/" . $db . "/" . $table . ".json");
     Ref::to("?null");
 }
 
-// Eintrag hinzufügen
 if (isset($_GET["add"])) {
     $obj = [];
 
@@ -37,13 +31,13 @@ if (isset($_GET["add"])) {
     Ref::to("?show=table&db=" . urlencode($db) . "&t=" . urlencode($table));
 }
 
-// Datensatz bearbeiten
 if (isset($_GET["edit"]) && isset($_GET["id"])) {
     $id = $_GET["id"];
     $newData = [];
 
     foreach ($keys as $key) {
         if ($key === "id") continue;
+
         if (isset($_POST[$key])) {
             $newData[$key] = $_POST[$key];
         }
@@ -52,7 +46,6 @@ if (isset($_GET["edit"]) && isset($_GET["id"])) {
     GBDB::editData($db, $table, "id", $id, $newData);
     Ref::to("?show=table&db=" . urlencode($db) . "&t=" . urlencode($table));
 }
-
 ?>
 
 <div class="main">
@@ -69,8 +62,6 @@ if (isset($_GET["edit"]) && isset($_GET["id"])) {
     </div>
 
     <div class="content">
-
-        <!-- Formular für neuen Eintrag -->
         <div class="form-container">
             <h2>Neuen Eintrag erstellen</h2>
 
@@ -86,13 +77,10 @@ if (isset($_GET["edit"]) && isset($_GET["id"])) {
                 <button type="submit" class="btn">Hinzufügen</button>
             </form>
         </div>
-
-        <!-- Suche -->
         <div class="search-bar">
             <input type="text" id="search" placeholder="Einträge durchsuchen...">
         </div>
 
-        <!-- Tabelle -->
         <table>
             <thead>
                 <tr>
@@ -151,7 +139,6 @@ function startEdit(id) {
     let colIndex = 0;
 
     <?php
-    // JS: array von keys erzeugen
     echo "const columns = " . json_encode($keys) . ";\n";
     ?>
 
@@ -171,7 +158,6 @@ function startEdit(id) {
         cells[i].appendChild(input);
     }
 
-    // Actions ersetzen durch Save / Cancel
     const actionCell = cells[cells.length - 1];
     actionCell.innerHTML = `
         <button class="btn" style="background:#2ecc71;color:#fff"
@@ -196,7 +182,6 @@ function saveEdit(id) {
     form.method = "post";
     form.action = "?show=table&edit=true&db=<?php echo urlencode($db); ?>&t=<?php echo urlencode($table); ?>&id=" + id;
 
-    // Alle Input-Felder einsammeln
     row.querySelectorAll("input").forEach(input => {
 
         const hidden = document.createElement("input");

@@ -1,4 +1,43 @@
 {
+    "demo": {
+        "main": {
+            "users": {
+                "uid": "",
+                "name": "",
+                "password": ""
+            }
+        }
+    },
+    "gqlshowcase": {
+        "gqlshowcasemain": {
+            "users": {
+                "tags": "",
+                "login_count": "",
+                "uid": "",
+                "username": "",
+                "email": "",
+                "password": "",
+                "active": "",
+                "created_at": "",
+                "last_login": "",
+                "role": "",
+                "note": "",
+                "score": ""
+            },
+            "usersarchive": {
+                "uid": "",
+                "username": "",
+                "email": "",
+                "password": "",
+                "active": "",
+                "created_at": "",
+                "last_login": "",
+                "role": "",
+                "note": "",
+                "score": ""
+            }
+        }
+    },
     "greenqluiv2system": {
         "system": {
             "users": {
@@ -20,7 +59,9 @@
                 "knr": "",
                 "name": "",
                 "email": "",
-                "notiz": ""
+                "notiz": "",
+                "aktiv": "1",
+                "alter": 44
             }
         }
     }

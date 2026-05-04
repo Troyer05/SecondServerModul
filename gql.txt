@@ -1,0 +1,215 @@
+greenQL Highlighting-Wörter / Purpose
+=====================================
+
+Variablen
+---------
+_...                Normale Variable. Muss bei Deklaration und Aufruf mit _ beginnen.
+$...                Konstante. Wird wie Variable genutzt, kann aber nach erster Deklaration nicht überschrieben werden.
+
+Deklaration / Werte
+-------------------
+DECLARE             Variable oder Konstante deklarieren.
+DECALRE             Tippfehler-kompatibler Alias für DECLARE.
+DELACE              Legacy-/Alias-Schreibweise, bleibt fürs Highlighting erhalten.
+PARAM / param()     Script-Parameter aus dem Runtime-Parameterobjekt lesen.
+NOW                 Aktueller Zeitwert.
+TRUE/FALSE/NULL     Literale Werte.
+
+Control Flow
+------------
+IF                  Bedingten Block starten.
+ELSE                Alternativblock.
+FOR                 Schleife.
+MAP_OBJECT          Objekt/Array iterieren.
+BACK                Wert aus Funktion oder Script zurückgeben.
+FILE.BACK           Wert aus einer per FILE.RUN ausgeführten Datei zurückgeben.
+END_PROC            Stoppt die gesamte Script-Ausführung an dieser Stelle erfolgreich.
+this_f.restart()    Startet die aktuelle Funktion erneut. Sicherheitslimit ist eingebaut.
+ERROR MSG           Fehler mit Nachricht ausgeben.
+MSG                 Nachricht ausgeben.
+
+Ausgabe / Logging
+-----------------
+OUTPUT              Schreibt einen Eintrag in den Output-Stream. Mehrere Outputs werden nacheinander angezeigt.
+SET_LOGFILE         Setzt die aktive Logdatei: SET_LOGFILE("path/to/log.txt").
+LOG                 Schreibt Werte/Objekte in die aktive Logdatei: LOG(_value).
+CLEAR_LOG           Leert die aktive Logdatei.
+DELETE_LOG_FILE     Löscht die aktive Logdatei und entfernt sie aus dem Context.
+
+Dateien
+-------
+FILE.INCLUDE        Führt ein Script im aktuellen Context aus.
+FILE.RUN            Führt ein Script separat mit optionalem Parameterobjekt aus.
+FILE.BACK           Rückgabewert aus FILE.RUN.
+INCLUDE             Highlighting-Hilfswort für FILE.INCLUDE.
+RUN                 Highlighting-Hilfswort für FILE.RUN.
+FILE                Highlighting-Hilfswort für FILE.*.
+
+Instance / Base / Table
+-----------------------
+USE INSTANCE        GBDBv2-Instanz aktivieren.
+ROOT INSTANCE       GBDBv2-Instanz fokussieren.
+SHOW INSTANCES      Instanzen anzeigen.
+GROW INSTANCE       Instanz erstellen.
+DROP INSTANCE       Instanz löschen.
+FORCE               Erzwingt Löschen bei DROP INSTANCE.
+ROOT                Aktive Base setzen.
+BRANCH              Aktive Tabelle setzen.
+SHOW BASES          Bases anzeigen.
+SHOW TABLES         Tabellen anzeigen.
+GROW BASE           Base erstellen.
+DROP BASE           Base löschen.
+GROW TABLE          Tabelle erstellen.
+DROP TABLE          Tabelle löschen.
+ALTER TABLE ADD     Spalte ergänzen.
+COLUMN              Spaltenbegriff fürs Highlighting.
+DEFAULT             Default-Wert bei Spalten.
+DESCRIBE            Tabellenstruktur anzeigen.
+
+CRUD / Query
+------------
+PICK                Daten lesen.
+FROM                Tabelle/Base im Query angeben.
+WHERE               Filterbedingung.
+SORT                Sortierung.
+ASC / DESC          Sortierrichtung.
+LIMIT / MAX         Ergebnislimit.
+SEED                Datensatz einfügen.
+WITH                Datenblock bei SEED/RESHAPE.
+RESHAPE             Datensatz ändern.
+ERASE               Datensatz löschen.
+DELETE              Löschbefehl/Keyword.
+IN                  Kontext bei EXISTS DATA / Tabellenbezug.
+AS                  Alias-/Klassenzusammenhang.
+
+Transaktionen / Wartung
+-----------------------
+BEGIN               Transaktion starten.
+COMMIT              Transaktion speichern.
+ROLLBACK            Transaktion zurückrollen.
+TRANSACTION         Transaktionsstatus anzeigen.
+PACK                Tabelle/Base optimieren/kompaktieren.
+PEEK                Vorschau/Inspektion.
+CHECK               Prüfung.
+HEALTH              Health-Check.
+REPAIR              Reparaturversuch.
+SNAPSHOT            Snapshot/Backup-Kontext.
+META                Metadatenblock setzen.
+EXPLAIN             Query erklären.
+
+Index / Constraints
+-------------------
+INDEX               Index anlegen.
+INDEXES             Indexe anzeigen.
+UNINDEX             Index entfernen.
+REINDEX             Index neu aufbauen.
+CONSTRAINT          Constraint setzen.
+CONSTRAINTS         Constraints anzeigen.
+UNIQUE              Einmaligkeitsregel.
+REQUIRED            Pflichtfeldregel.
+
+Klassen / Funktionen
+--------------------
+CLASS / C           Klasse definieren oder aufrufen.
+CALL                Klassenmethode aufrufen.
+PUB / PRIV          Sichtbarkeit in greenQL-Klassen.
+F                  Funktion/Methode definieren.
+
+Runtime-Funktionen
+------------------
+hash()              Standardmäßig SHA-256 Hash oder Hash mit Algorithmus.
+hash_sha256()       SHA-256 Hash.
+hash_sha512()       SHA-512 Hash.
+hash_md5()          MD5 Hash.
+hash_adler32()      Adler32 Hash.
+hash_crc32()        CRC32 Hash.
+len()               Länge von String/Array.
+fetch_api()         Externe API abrufen: fetch_api(url, bodyObj, headerObj).
+api_fetch()         Alias für fetch_api().
+call_api()          Alias für fetch_api().
+uni_random()        Einmalige Random-Zeichenkette erzeugen.
+spark_id()          Alias für uni_random().
+fresh_id()          Alias für uni_random().
+get_data()          Daten holen.
+fetch_data()        Alias für get_data().
+fetch()             Alias für get_data().
+add_data()          Datensatz einfügen.
+plant_data()        Alias für add_data().
+seed_data()         Alias für add_data().
+editData()          Datensatz ändern.
+edit_data()         Datensatz ändern.
+reshape_data()      Alias für edit_data().
+delete_data()       Datensatz löschen.
+erase_data()        Alias für delete_data().
+delete_data_recursive() Datensatz rekursiv/aliasartig löschen.
+count_data()        Datensätze zählen.
+tally_data()        Alias für count_data().
+last_added()        Letzten Datensatz holen.
+last_data()         Alias für last_added().
+get_instances()     Instanzen auflisten.
+instances()         Alias für get_instances().
+get_bases()         Bases einer Instanz auflisten.
+bases()             Alias für get_bases().
+get_tables()        Tabellen einer Base auflisten.
+tables()            Alias für get_tables().
+new_column()        Spalte hinzufügen.
+sprout_column()     Alias für new_column().
+delete_column()     Spalte löschen.
+prune_column()      Alias für delete_column().
+delete_instance()   Instanz löschen.
+drop_instance()     Alias für delete_instance().
+delete_base()       Base löschen.
+drop_base()         Alias für delete_base().
+delete_table()      Tabelle löschen.
+drop_table()        Alias für delete_table().
+rename_instance()   Instanz umbenennen.
+rename_base()       Base umbenennen.
+rename_table()      Tabelle umbenennen.
+transfer_data()     Tabelle/Daten von Objekt nach Objekt kopieren.
+copy_data()         Alias für transfer_data().
+transfer_data_delete() Kopieren und Quelle löschen.
+move_data()         Alias für transfer_data_delete().
+set_data_readonly() Datensatz readonly setzen/entfernen.
+lock_data()         Alias für set_data_readonly().
+
+EXISTS
+------
+EXISTS INSTANCE     Prüft, ob Instanz existiert.
+EXISTS BASE         Prüft, ob Base existiert.
+EXISTS TABLE        Prüft, ob Tabelle in aktiver Base existiert.
+EXISTS DATA         Prüft, ob ein Datensatz existiert.
+
+Advanced GBDB / Engine
+----------------------
+MONITOR;                            Monitoring-Übersicht über alle erreichbaren Tabellen anzeigen.
+MONITOR main.users;                 Monitoring für eine konkrete Tabelle anzeigen.
+RECOVER main.users;                 WAL-/Append-Recovery für eine Tabelle ausführen.
+PAGE main.users PAGE 1 SIZE 50;     Eine konkrete Datenseite laden.
+PAGE main.users SIZE 50;            Kurzform: Seite 1 mit 50 Datensätzen laden.
+CURSOR main.users SIZE 100;         Cursor-basierten Slice laden.
+CURSOR main.users SIZE 100 AFTER <cursor>; Nächsten Cursor-Slice laden.
+FULLTEXT main.users SEARCH "Max Muster"; Volltextsuche über alle Textspalten.
+FULLTEXT main.users SEARCH "Max Muster" COLUMNS username,email LIMIT 25; Volltextsuche mit Spalten- und Limit-Angabe.
+
+Legacy-kompatible Advanced Syntax
+---------------------------------
+MONITOR users IN main;
+RECOVER users IN main;
+PAGE users IN main PAGE 1 SIZE 50;
+CURSOR users IN main LIMIT 100;
+FULLTEXT "Max Muster" FROM users IN main LIMIT 25;
+
+Neue Runtime-Funktionen / Advanced-Funktionen
+--------------------------------------------
+instance_exists("default")        Prüft, ob eine GBDBv2-Instanz existiert.
+base_exists("main")               Prüft, ob eine Base in der aktuellen Instanz/Engine existiert.
+base_exists("kunde1", "main")     Prüft, ob eine Base in einer konkreten Instanz existiert.
+table_exists("main", "users")     Prüft, ob eine Tabelle existiert.
+table_exists("kunde1", "main", "users") Prüft, ob eine Tabelle in einer Instanz existiert.
+data_exists("main", "users", ["email": "max@example.de"]) Prüft, ob ein Datensatz existiert.
+monitor()                         Liefert Monitoringdaten über alle Tabellen.
+monitor("main", "users")         Liefert Monitoringdaten zu einer Tabelle.
+recover("main", "users")         Führt WAL-/Append-Recovery für eine Tabelle aus.
+page("main", "users", 1, 50)     Lädt eine Page als Runtime-Wert.
+cursor("main", "users", 100)     Lädt einen Cursor-Slice als Runtime-Wert.
+fulltext_search("main", "users", "Max Muster", ["username", "email"], 25) Führt Volltextsuche aus.

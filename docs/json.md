@@ -1,80 +1,76 @@
 # Json
+
 ## Zweck
-`Json` stellt JSON-Helfer bereit, insbesondere für einheitliches Encodieren/Decodieren und Dateizugriff.
-## Datei und Einbindung
-- Klasse: `Json`
-- Datei: `assets/php/inc/gbdb_framework/core/json.php`
-- Wird normalerweise über `assets/php/inc/gbdb_framework/gbdb.php` oder über `assets/php/inc/.config/_config.inc.php` geladen.
 
-## Arbeitsweise
-Die Klasse wird überwiegend statisch genutzt. Öffentliche Methoden sind die stabile API für Projektcode. Private/protected Methoden sind interne Bausteine und sollten nicht direkt aus Anwendungen heraus verwendet werden.
+JSON-Dateihelper für Framework-Konfigurationen und einfache Stores.
 
-Typische Aufrufkette:
+## Hintergrund und Intention
 
-1. Framework-Konfiguration laden.
-2. Optional benötigte Initialisierung ausführen.
-3. Öffentliche Methode der Klasse nutzen.
-4. Rückgabewert auf Fehler/Leere prüfen.
+Die Klasse ist bewusst als statische Utility-/Serviceklasse aufgebaut. Dadurch kann sie nach dem zentralen Framework-Include ohne Dependency-Injection oder Objektinitialisierung verwendet werden. Das passt zum Coding-Stil dieses Frameworks: kurze Aufrufe, klare Dateistruktur, einfache Erweiterbarkeit und möglichst wenig Boilerplate.
 
-## Öffentliche API
-| Methode | Rückgabe | Beschreibung |
-|---|---:|---|
-| `decode(string $json, bool $assoc = false)` | `mixed` | Dekodiert einen JSON-String in ein PHP-Array oder Objekt Gibt bei Fehlern eine klare Fehlermeldung zurück. |
-| `encode(mixed $data, bool $pretty = false)` | `string` | Kodiert ein PHP-Array oder Objekt in einen JSON-String. UTF-8 sicher, pretty-print im DEV Mode. |
-| `isJson(string $json)` | `bool` | Überprüft, ob eine Zeichenkette valides JSON ist. |
-| `loop(mixed $data, callable $callback)` | `mixed` | Wendet eine Callback-Funktion auf jedes Element eines Arrays oder Objekts an. |
-| `elementExists(mixed $data, string $key)` | `bool` | Überprüft, ob ein Schlüssel in Array/Objekt existiert. |
-| `getElement(mixed $data, string $key)` | `mixed` | Ruft ein Element aus Array/Objekt ab — oder null. |
+## Einbindung
 
-## Beispiele
 ```php
-include 'assets/php/inc/.config/_config.inc.php';
-
-// Beispielaufruf; Parameter bitte passend zum Projekt einsetzen.
-$result = Json::decode("example", false);
-var_dump($result);
+require_once __DIR__ . "/assets/php/inc/.config/_config.inc.php";
 ```
 
-## Fehlerquellen und Debugging
-- Prüfe zuerst, ob `_config.inc.php` korrekt geladen wurde.
-- Bei leeren Rückgaben immer zwischen `false`, leerem Array und nicht vorhandenem Datensatz unterscheiden.
-- Bei Datei- oder GBDB-Zugriffen Schreibrechte des Webservers prüfen.
-- Bei Remote-Aufrufen Netzwerk, URL, Auth-Key und JSON-Antwort kontrollieren.
-- In Entwicklung `Vars::__DEV__()` bzw. eigene Logs nutzen, aber produktive Secrets nie ausgeben.
+Danach steht `Json` zur Verfügung.
 
-## Best Practices
-- Öffentliche Methoden bevorzugen und interne Dateipfade nicht hart im Anwendungscode duplizieren.
-- Rückgaben immer validieren, bevor sie in HTML, API-Antworten oder weitere DB-Operationen fließen.
-- Für neue Features erst Schema/Tabellen sauber anlegen und danach Daten schreiben.
-- Für produktive Systeme Backups, Schreibrechte und Authentifizierung vor dem Rollout testen.
+## Typisches Beispiel
 
-## Integration in eigene Projekte
+```php
+$data = Json::read("assets/php/inc/gbdb_framework/json/schema.json");
+Json::write("tmp.json", ["ok" => true]);
+```
 
-Beim Einbau in neue Projekte sollte diese Komponente nicht isoliert betrachtet werden. Fast alle Framework-Klassen hängen indirekt an der zentralen Konfiguration `Vars` und an der gemeinsamen Einbindung über `_config.inc.php`. Dadurch bleibt der Anwendungscode kurz, aber Konfigurationsfehler fallen oft erst zur Laufzeit auf. Für saubere Projekte empfiehlt es sich deshalb, zuerst eine kleine Setup- oder Healthcheck-Seite anzulegen, die prüft, ob die Klasse geladen ist, ob die benötigten Pfade existieren und ob Schreib-/Leserechte stimmen.
+## Öffentliche Methoden
 
-Ein typischer Integrationsablauf sieht so aus:
+|Methode|Rückgabe|Beschreibung|
+|---|---|---|
+|`decode(string $json, bool $assoc = false)`|mixed|öffentliche Methode der Klasse|
+|`encode(mixed $data, bool $pretty = false)`|string|öffentliche Methode der Klasse|
+|`isJson(string $json)`|bool|öffentliche Methode der Klasse|
+|`loop(mixed $data, callable $callback)`|mixed|öffentliche Methode der Klasse|
+|`elementExists(mixed $data, string $key)`|bool|öffentliche Methode der Klasse|
+|`getElement(mixed $data, string $key)`|mixed|öffentliche Methode der Klasse|
 
-1. `_config.inc.php` laden.
-2. Benötigte Konstanten und `Vars`-Werte prüfen.
-3. Falls nötig Initialisierung ausführen.
-4. Einen einfachen Leseaufruf testen.
-5. Einen einfachen Schreibaufruf testen.
-6. Fehlerfälle testen, nicht nur den Erfolgsfall.
+## Interne Hilfsmethoden
 
-## Test-Checkliste
+_Keine internen Hilfsmethoden dokumentiert._
 
-- Läuft der Code lokal und auf dem Server mit derselben PHP-Version?
-- Sind alle benötigten Core-Dateien wirklich geladen?
-- Sind Rückgaben dokumentiert und werden sie im Anwendungscode geprüft?
-- Gibt es einen Test mit leerer Eingabe, ungültiger Eingabe und gültiger Eingabe?
-- Sind Dateipfade relativ zum Projekt-Root und nicht zum aktuellen Browserpfad gedacht?
-- Sind produktive Secrets aus Logs, Fehlermeldungen und Screenshots entfernt?
-- Funktioniert der Ablauf nach einem frischen Upload ohne manuelles Nachbessern der Rechte?
+## Konstanten
 
-## Wartung und Erweiterung
+_Keine dokumentationsrelevanten Konstanten._
 
-Wenn diese Klasse erweitert wird, sollte jede neue öffentliche Methode sofort in dieser Dokumentation auftauchen. Bei Klassen, die mit GBDB arbeiten, muss außerdem geprüft werden, ob neue Tabellen oder Spalten in `schema.json` bzw. `schema_v2.json` berücksichtigt werden müssen. Bei Klassen, die Remote-Requests ausführen, sollten Fehlermeldungen immer so formuliert werden, dass Entwickler das Problem finden können, ohne dabei Auth-Tokens oder API-Keys offenzulegen.
+## Verwendung im Framework
 
-## Praktische Hinweise für andere Entwickler
+`Json` wird über den zentralen Loader eingebunden und ist damit projektweit verfügbar. Je nach Klasse arbeitet sie mit GBDB, Konfiguration, Dateisystem, HTTP, Sessions, Cookies oder externen APIs zusammen. Die konkrete Verantwortung bleibt aber innerhalb der Klasse gekapselt, damit Seiten und Plugins nur kurze, lesbare Aufrufe benötigen.
 
-Dieses Framework folgt bewusst einem sehr direkten PHP-Stil. Viele Methoden sind statisch und dadurch einfach aufzurufen. Der Nachteil ist, dass falsche globale Konfigurationen schneller Auswirkungen auf mehrere Klassen haben. Andere Entwickler sollten deshalb nicht nur die einzelne Methode lesen, sondern auch die umgebenden Dateien `ENV.php`, `_config.inc.php` und bei Remote-Funktionen `backend.php` prüfen.
+## Typischer Ablauf
+
+1. `_config.inc.php` einbinden.
+2. Eingaben vorbereiten und validieren.
+3. passende öffentliche Methode von `Json` aufrufen.
+4. Rückgabe prüfen.
+5. Fehlerfälle sauber behandeln und keine sensitiven Werte ausgeben.
+
+## Hinweise zur Verwendung
+
+- Eingaben aus Formularen oder Requests vor der Übergabe validieren.
+- Rückgaben immer auf erwartete Struktur prüfen, insbesondere bei API-/Remote-Klassen.
+- Bei Klassen mit Datei- oder DB-Zugriff müssen Schreibrechte im Projektordner passen.
+- Bei sicherheitsrelevanten Klassen keine Tokens, Passwörter oder Secrets in Logs ausgeben.
+- Bei Erweiterungen den bestehenden Stil beibehalten: Konstanten zuerst, private Helfer danach, öffentliche Methoden am Ende.
+
+## Fehlerquellen
+
+| Problem | Mögliche Ursache | Empfehlung |
+|---|---|---|
+| leere oder unerwartete Rückgabe | fehlende Daten, falscher Pfad oder falscher Context | Eingabeparameter und Config prüfen. |
+| Schreiboperation schlägt fehl | Webserver hat keine Rechte | Besitzer, Gruppe und ACLs prüfen. |
+| Remote/API-Antwort ungültig | Endpoint, Auth oder JSON-Format falsch | Response debuggen, aber Secrets maskieren. |
+| Methode wirkt ohne Effekt | falsche Instanz, falsche Base oder Cache-Zustand | Context und aktive Instanz kontrollieren. |
+
+## Erweiterungsidee
+
+Wenn diese Klasse erweitert wird, sollte jede neue öffentliche Methode ein klares Ziel haben, eine robuste Rückgabe liefern und keine versteckten Seiteneffekte erzeugen. Für wiederkehrende Validierung oder Normalisierung besser private Hilfsmethoden ergänzen, statt Logik in mehreren öffentlichen Methoden zu duplizieren.

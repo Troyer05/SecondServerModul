@@ -5,7 +5,7 @@ class Vars {
      * Umgebungsvariablen zur Konfiguration von GBDB-FrameWork
      */
 
-    protected static ?bool $isDev = null;
+    protected static ?bool $isDev = null; // Toggle DEV Mode true/false/null 
 
     private const APP = [
         "version" => "1.0",
@@ -17,7 +17,7 @@ class Vars {
         "gbdb_write_permission" => true,
         "greenql_access" => true,
         "auth_keys" => [
-            "dev_key_01"
+            "dev_key_01" // Ist nur demo, vor produktivschaltung entfernen
         ]
     ];
 
@@ -155,13 +155,7 @@ class Vars {
     }
 
     // ======================================================
-    // # Hier beginnt die Auswertung der Umgebungsvariablen #
-    // ======================================================
 
-    /**
-     * Verarbeitet die Funktion __ d e v__.
-     * @return bool Rückgabewert.
-     */
     public static function __DEV__(): bool {
         if (self::$isDev !== null) {
             return self::$isDev;
